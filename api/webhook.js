@@ -6,9 +6,19 @@ export default async function handler(req, res) {
   console.log('Query:', req.query);
   console.log('========================');
 
-  // Handle form submission
-  if (req.body?.value) {
-    const formData = req.body.value;
+  // Handle form submission - Teams sends in different formats
+  if (req.body?.value || req.body?.type === 'invoke') {
+    let formData;
+    
+    // Handle different Teams submission formats
+    if (req.body?.value?.action?.data) {
+      formData = req.body.value.action.data;
+    } else if (req.body?.value) {
+      formData = req.body.value;
+    } else if (req.body?.data) {
+      formData = req.body.data;
+    }
+    
     console.log('Form submission received:', formData);
     
     try {
@@ -95,9 +105,11 @@ export default async function handler(req, res) {
           ],
           actions: [
             {
-              type: "Action.OpenUrl",
+              type: "Action.Submit",
               title: "Submit",
-              url: "https://msteams-hook.vercel.app/api/webhook?action=submit"
+              data: {
+                "submitType": "feedback"
+              }
             }
           ]
         }
