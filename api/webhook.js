@@ -1,6 +1,28 @@
-export default function handler(req, res) {
+export default async function handler(req, res) {
   console.log('Method:', req.method);
   console.log('Body:', req.body);
+
+  // Handle form submission
+  if (req.body?.value) {
+    const formData = req.body.value;
+    console.log('Form submission received:', formData);
+    
+    try {
+      // Test MongoDB connection and save
+      console.log('Attempting to connect to MongoDB...');
+      await saveToDatabase(formData);
+      console.log('Successfully saved to MongoDB');
+      
+      return res.status(200).json({
+        text: `✅ Thank you ${formData.name}! Your feedback has been saved to MongoDB.`
+      });
+    } catch (error) {
+      console.error('MongoDB connection/save error:', error.message);
+      return res.status(200).json({
+        text: `❌ Database Error: ${error.message}. Please check MongoDB connection.`
+      });
+    }
+  }
 
   // Clean mention from text
   let cleanText = req.body?.text || '';
@@ -81,5 +103,42 @@ export default function handler(req, res) {
     res.status(200).json({
       text: `The message going out is "${cleanText}"`
     });
+  }
+}
+
+// Database save function with better error handling
+async function saveToDatabase(formData) {
+  const { MongoClient } = require('mongodb');
+  
+  console.log('MongoDB URI:', process.env.MONGODB_URI ? 'Set' : 'Not set');
+  
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable not set');
+  }
+  
+  const client = new MongoClient(process.env.MONGODB_URI);
+  
+  try {
+    console.log('Connecting to MongoDB...');
+    await client.connect();
+    console.log('Connected successfully');
+    
+    const db = client.db('feedback');
+    const result = await db.collection('submissions').insertOne({
+      name: formData.name,
+      email: formData.email,
+      rating: formData.rating,
+      feedback: formData.feedback,
+      timestamp: new Date()
+    });
+    
+    console.log('Document inserted with ID:', result.insertedId);
+    return result;
+  } catch (error) {
+    console.error('MongoDB operation failed:', error);
+    throw error;
+  } finally {
+    await client.close();
+    console.log('MongoDB connection closed');
   }
 }
