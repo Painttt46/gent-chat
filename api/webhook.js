@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   try {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -69,7 +69,7 @@ Response format instructions:
 Choose FORMAT:CARD when the response would look better with structured formatting.
 
 `;
-    
+
     // Add previous conversation history
     if (history.length > 0) {
       conversationContext += "Previous conversation in this channel:\n";
@@ -78,7 +78,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       });
       conversationContext += "\n";
     }
-    
+
     conversationContext += `Current message from team member: ${cleanText}`;
 
     // Generate response
@@ -89,7 +89,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     // Parse format choice
     const isCardFormat = text.startsWith('FORMAT:CARD');
     const isTextFormat = text.startsWith('FORMAT:TEXT');
-    
+
     let cleanResponse = text;
     if (isCardFormat) {
       cleanResponse = text.replace('FORMAT:CARD', '').trim();
@@ -148,7 +148,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
   } catch (error) {
     console.error('Gemini API error:', error);
-    
+
     res.status(200).json({
       text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
     });
