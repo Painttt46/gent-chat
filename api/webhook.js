@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   try {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    const model = genai.GenerativeModel('gemini-2.5-pro')
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -46,9 +46,29 @@ export default async function handler(req, res) {
     const history = conversations.get(userId);
 
     // Build conversation context with agent prompt
-    let conversationContext = `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. `;
+    let conversationContext = `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
 
+Your role:
+- Provide professional, helpful assistance to office workers
+- Be friendly, concise, and actionable in your responses
+- You're part of the team conversation in this Teams channel
+- Help with work-related questions, productivity tips, and general office support
 
+Response format instructions:
+- For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
+- For any of these, use "FORMAT:CARD" followed by your response:
+  * Lists, steps, or bullet points
+  * Detailed explanations or tutorials
+  * Multiple pieces of information
+  * Structured data or comparisons
+  * Professional advice or recommendations
+  * When the user asks "how to" questions
+  * When providing examples or templates
+  * When the information would benefit from better formatting
+
+Choose FORMAT:CARD when the response would look better with structured formatting.
+
+`;
 
     // Add previous conversation history
     if (history.length > 0) {
