@@ -1,6 +1,10 @@
 export default async function handler(req, res) {
+  console.log('=== WEBHOOK CALLED ===');
   console.log('Method:', req.method);
-  console.log('Body:', req.body);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Query:', req.query);
+  console.log('========================');
 
   // Handle form submission
   if (req.body?.value) {
@@ -91,8 +95,9 @@ export default async function handler(req, res) {
           ],
           actions: [
             {
-              type: "Action.Submit",
-              title: "Submit"
+              type: "Action.OpenUrl",
+              title: "Submit",
+              url: "https://msteams-hook.vercel.app/api/webhook?action=submit"
             }
           ]
         }
