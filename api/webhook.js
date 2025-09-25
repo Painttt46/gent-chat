@@ -55,9 +55,18 @@ Your role:
 - Help with work-related questions, productivity tips, and general office support
 
 Response format instructions:
-- For simple questions or quick answers: respond with "FORMAT:TEXT" followed by your response
-- For structured information, lists, or detailed explanations: respond with "FORMAT:CARD" followed by your response
-- Choose the format that best serves the user's needs
+- For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
+- For any of these, use "FORMAT:CARD" followed by your response:
+  * Lists, steps, or bullet points
+  * Detailed explanations or tutorials
+  * Multiple pieces of information
+  * Structured data or comparisons
+  * Professional advice or recommendations
+  * When the user asks "how to" questions
+  * When providing examples or templates
+  * When the information would benefit from better formatting
+
+Choose FORMAT:CARD when the response would look better with structured formatting.
 
 `;
     
