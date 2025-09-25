@@ -30,14 +30,14 @@ export default async function handler(req, res) {
 
   if (!cleanText) {
     return res.status(200).json({
-      text: "Hi! I'm your work assistant. How can I help you today? (Type 'clear' to reset conversation)"
+      text: "Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today? (Type 'clear' to reset conversation)"
     });
   }
 
   try {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -45,77 +45,103 @@ export default async function handler(req, res) {
     }
     const history = conversations.get(userId);
 
-    // Build conversation context
-    let conversationContext = "You are a helpful work assistant for office workers. Provide practical, professional advice and answers. Keep responses concise and actionable.\n\n";
+    // Build conversation context with agent prompt
+    let conversationContext = `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
+
+Your role:
+- Provide professional, helpful assistance to office workers
+- Be friendly, concise, and actionable in your responses
+- You're part of the team conversation in this Teams channel
+- Help with work-related questions, productivity tips, and general office support
+
+Response format instructions:
+- For simple questions or quick answers: respond with "FORMAT:TEXT" followed by your response
+- For structured information, lists, or detailed explanations: respond with "FORMAT:CARD" followed by your response
+- Choose the format that best serves the user's needs
+
+`;
     
     // Add previous conversation history
     if (history.length > 0) {
-      conversationContext += "Previous conversation:\n";
+      conversationContext += "Previous conversation in this channel:\n";
       history.forEach((msg, index) => {
         conversationContext += `${msg.role}: ${msg.content}\n`;
       });
       conversationContext += "\n";
     }
     
-    conversationContext += `Current question: ${cleanText}`;
+    conversationContext += `Current message from team member: ${cleanText}`;
 
     // Generate response
     const result = await model.generateContent(conversationContext);
     const response = result.response;
     const text = response.text();
 
+    // Parse format choice
+    const isCardFormat = text.startsWith('FORMAT:CARD');
+    const isTextFormat = text.startsWith('FORMAT:TEXT');
+    
+    let cleanResponse = text;
+    if (isCardFormat) {
+      cleanResponse = text.replace('FORMAT:CARD', '').trim();
+    } else if (isTextFormat) {
+      cleanResponse = text.replace('FORMAT:TEXT', '').trim();
+    }
+
     // Save to conversation history (keep last 10 messages)
     history.push({ role: "User", content: cleanText });
-    history.push({ role: "Assistant", content: text });
+    history.push({ role: "Gent", content: cleanResponse });
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
 
-    // Return as adaptive card
-    res.status(200).json({
-      type: "message",
-      attachments: [{
-        contentType: "application/vnd.microsoft.card.adaptive",
-        content: {
-          type: "AdaptiveCard",
-          version: "1.2",
-          body: [
-            {
-              type: "TextBlock",
-              text: "🤖 Work Assistant",
-              weight: "Bolder",
-              size: "Medium",
-              color: "Accent"
-            },
-            {
-              type: "TextBlock",
-              text: `**Q:** ${cleanText}`,
-              wrap: true,
-              spacing: "Medium"
-            },
-            {
-              type: "TextBlock",
-              text: text,
-              wrap: true,
-              spacing: "Medium"
-            },
-            {
-              type: "TextBlock",
-              text: `💬 Messages in conversation: ${history.length / 2} | Type 'clear' to reset`,
-              size: "Small",
-              color: "Accent",
-              spacing: "Medium"
-            }
-          ]
-        }
-      }]
-    });
+    // Return based on Gemini's format choice
+    if (isCardFormat) {
+      // Return as adaptive card
+      res.status(200).json({
+        type: "message",
+        attachments: [{
+          contentType: "application/vnd.microsoft.card.adaptive",
+          content: {
+            type: "AdaptiveCard",
+            version: "1.2",
+            body: [
+              {
+                type: "TextBlock",
+                text: "🤖 Gent - Work Assistant",
+                weight: "Bolder",
+                size: "Medium",
+                color: "Accent"
+              },
+              {
+                type: "TextBlock",
+                text: cleanResponse,
+                wrap: true,
+                spacing: "Medium"
+              },
+              {
+                type: "TextBlock",
+                text: `💬 ${history.length / 2} messages in conversation | Type 'clear' to reset`,
+                size: "Small",
+                color: "Accent",
+                spacing: "Medium"
+              }
+            ]
+          }
+        }]
+      });
+    } else {
+      // Return as simple text
+      res.status(200).json({
+        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | Type 'clear' to reset`
+      });
+    }
 
   } catch (error) {
     console.error('Gemini API error:', error);
     
     res.status(200).json({
-      text: `❌ Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
+      text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
     });
   }
 }
