@@ -101,7 +101,7 @@ export default async function handler(req, res) {
   } else {
     // Return custom message format
     res.status(200).json({
-      text: `The message going out is "${cleanText}"`
+      text: `The message is "${cleanText}"`
     });
   }
 }
