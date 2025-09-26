@@ -6,8 +6,7 @@ const conversations = new Map();
 // Model tracking
 const models = {
   'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0 },
-  'gemini-1.5-pro': { name: 'Gemini 1.5 Pro', count: 0 },
-  'gemini-1.5-flash': { name: 'Gemini 1.5 Flash', count: 0 }
+  'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0 }
 };
 const userModels = new Map(); // Track current model per user
 
@@ -166,7 +165,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
               },
               {
                 type: "TextBlock",
-                text: `💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests | Type 'clear' to reset`,
+                text: `💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests`,
                 size: "Small",
                 color: "Accent",
                 spacing: "Medium"
@@ -178,7 +177,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     } else {
       // Return as simple text
       res.status(200).json({
-        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests | Type 'clear' to reset`
+        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests`
       });
     }
 
