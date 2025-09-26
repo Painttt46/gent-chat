@@ -94,6 +94,9 @@ export default async function handler(req, res) {
   
   models[currentModel].count++;
 
+  // Check if user wants to broadcast to everyone (move outside try-catch)
+  const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
+
   // Clean mention from text
   let cleanText = req.body?.text || '';
   cleanText = cleanText.replace(/<at>.*?<\/at>/g, '');
@@ -143,7 +146,7 @@ export default async function handler(req, res) {
     const model = genAI.getGenerativeModel({ model: currentModel });
 
     // Check if user wants to broadcast to everyone
-    const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
+    // const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)'); // Moved outside try-catch
     
     // Remove (broadcast) from the message before processing
     const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
@@ -241,7 +244,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     
     if (shouldBroadcast) {
       // Send to Teams incoming webhook with stats
-      const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
+      const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(broadcastMessage);
       
       // Return empty response (no reply to user)
@@ -296,7 +299,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // If broadcast, send error to Teams webhook
     if (shouldBroadcast) {
-      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
+      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(errorMessage);
       return res.status(200).json({});
     }
