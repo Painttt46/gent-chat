@@ -9,6 +9,16 @@ const models = {
   'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0 }
 };
 const userModels = new Map(); // Track current model per user
+let lastResetDate = new Date().toDateString();
+
+// Reset counters daily
+function checkDailyReset() {
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
+    Object.keys(models).forEach(key => models[key].count = 0);
+    lastResetDate = today;
+  }
+}
 
 // Get total requests across all models
 function getTotalRequests() {
@@ -18,6 +28,9 @@ function getTotalRequests() {
 export default async function handler(req, res) {
   console.log('Method:', req.method);
   console.log('Body:', req.body);
+
+  // Check and reset counters daily
+  checkDailyReset();
 
   // Get user ID from Teams (fallback to 'default' if not available)
   const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
@@ -165,9 +178,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
               },
               {
                 type: "TextBlock",
-                text: `💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests`,
+                text: `💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count} requests**`,
                 size: "Small",
-                color: "Accent",
+                color: "Good",
+                weight: "Bolder",
                 spacing: "Medium"
               }
             ]
@@ -177,7 +191,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     } else {
       // Return as simple text
       res.status(200).json({
-        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests`
+        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count} requests**`
       });
     }
 
