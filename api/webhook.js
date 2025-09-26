@@ -142,6 +142,13 @@ export default async function handler(req, res) {
     const genAI = new GoogleGenerativeAI(getCurrentApiKey());
     const model = genAI.getGenerativeModel({ model: currentModel });
 
+    // Check if user wants to broadcast to everyone
+    const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
+    
+    // Remove (broadcast) from the message before processing
+    const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
+    const finalText = processedText || cleanText;
+
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
       conversations.set(userId, []);
@@ -183,10 +190,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       conversationContext += "\n";
     }
 
-    conversationContext += `Current message from team member: ${processedText || cleanText}`;
+    conversationContext += `Current message from team member: ${finalText}`;
 
     // Check for "home" API command
-    if ((processedText || cleanText).toLowerCase().includes('home')) {
+    if (finalText.toLowerCase().includes('home')) {
       try {
         const apiData = await fetch('https://api.zippopotam.us/us/33162');
         const jsonData = await apiData.json();
@@ -198,8 +205,8 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // Check if user is asking about an API/URL and fetch it
     const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = (processedText || cleanText).match(urlRegex);
-    if (urls && ((processedText || cleanText).toLowerCase().includes('research') || (processedText || cleanText).toLowerCase().includes('api') || (processedText || cleanText).toLowerCase().includes('check'))) {
+    const urls = finalText.match(urlRegex);
+    if (urls && (finalText.toLowerCase().includes('research') || finalText.toLowerCase().includes('api') || finalText.toLowerCase().includes('check'))) {
       try {
         const apiData = await fetch(urls[0]);
         const jsonData = await apiData.json();
@@ -226,17 +233,11 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
     // Save to conversation history (keep last 10 messages)
-    history.push({ role: "User", content: cleanText });
+    history.push({ role: "User", content: finalText });
     history.push({ role: "Gent", content: cleanResponse });
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
-
-    // Check if user wants to broadcast to everyone
-    const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
-    
-    // Remove (broadcast) from the message before processing
-    let processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
     
     if (shouldBroadcast) {
       // Send to Teams incoming webhook
