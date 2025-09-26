@@ -138,16 +138,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Initialize Gemini AI with current API key
-    const genAI = new GoogleGenerativeAI(getCurrentApiKey());
-    const model = genAI.getGenerativeModel({ model: currentModel });
-
     // Check if user wants to broadcast to everyone
     const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
     
     // Remove (broadcast) from the message before processing
     const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
     const finalText = processedText || cleanText;
+
+    // Initialize Gemini AI with current API key
+    const genAI = new GoogleGenerativeAI(getCurrentApiKey());
+    const model = genAI.getGenerativeModel({ model: currentModel });
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -242,9 +242,11 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     if (shouldBroadcast) {
       // Send to Teams incoming webhook with stats
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
-      await sendToTeamsWebhook(broadcastMessage);
+      const success = await sendToTeamsWebhook(broadcastMessage);
       
-      return res.status(200).end();
+      if (success) {
+        return res.status(200).end();
+      }
     }
 
     // Return based on Gemini's format choice
