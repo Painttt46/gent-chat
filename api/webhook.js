@@ -21,9 +21,17 @@ function getCurrentApiKey() {
 function checkLimitsAndSwitchKey(modelKey) {
   const model = models[modelKey];
   if (model.count >= model.limit) {
-    // Switch to other API key
-    currentApiKeyIndex = currentApiKeyIndex === 0 ? 1 : 0;
-    // Reset all counters when switching
+    // Try to switch to other API key
+    const newApiKeyIndex = currentApiKeyIndex === 0 ? 1 : 0;
+    
+    // Check if we've already tried both keys (both are maxed)
+    const allModelsMaxed = Object.values(models).every(m => m.count >= m.limit);
+    if (allModelsMaxed) {
+      return 'MAXED_OUT';
+    }
+    
+    // Switch to other API key and reset counters
+    currentApiKeyIndex = newApiKeyIndex;
     Object.keys(models).forEach(key => models[key].count = 0);
     return true; // Switched
   }
@@ -59,6 +67,13 @@ export default async function handler(req, res) {
   
   // Check limits and switch API key if needed
   const switched = checkLimitsAndSwitchKey(currentModel);
+  
+  // If both API keys are maxed out, return error
+  if (switched === 'MAXED_OUT') {
+    return res.status(200).json({
+      text: `⚠️ **Daily quota exceeded!** Both API keys have reached their limits:\n• Gemini 2.5 Flash: ${models['gemini-2.5-flash'].limit} requests\n• Gemini 2.5 Pro: ${models['gemini-2.5-pro'].limit} requests\n\nPlease try again tomorrow when counters reset.`
+    });
+  }
   
   models[currentModel].count++;
 
@@ -124,6 +139,7 @@ Your role:
 - Be friendly, concise, and actionable in your responses
 - You're part of the team conversation in this Teams channel
 - Help with work-related questions, productivity tips, and general office support
+- You can research APIs and URLs when asked
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
@@ -151,6 +167,30 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
     conversationContext += `Current message from team member: ${cleanText}`;
+
+    // Check for "home" API command
+    if (cleanText.toLowerCase().includes('home')) {
+      try {
+        const apiData = await fetch('https://api.zippopotam.us/us/33162');
+        const jsonData = await apiData.json();
+        conversationContext += `\n\nHome API Response from https://api.zippopotam.us/us/33162:\n${JSON.stringify(jsonData, null, 2)}`;
+      } catch (error) {
+        conversationContext += `\n\nNote: Could not fetch home API data - ${error.message}`;
+      }
+    }
+
+    // Check if user is asking about an API/URL and fetch it
+    const urlRegex = /https?:\/\/[^\s]+/g;
+    const urls = cleanText.match(urlRegex);
+    if (urls && (cleanText.toLowerCase().includes('research') || cleanText.toLowerCase().includes('api') || cleanText.toLowerCase().includes('check'))) {
+      try {
+        const apiData = await fetch(urls[0]);
+        const jsonData = await apiData.json();
+        conversationContext += `\n\nAPI Response from ${urls[0]}:\n${JSON.stringify(jsonData, null, 2)}`;
+      } catch (error) {
+        conversationContext += `\n\nNote: Could not fetch data from ${urls[0]} - ${error.message}`;
+      }
+    }
 
     // Generate response
     const result = await model.generateContent(conversationContext);
