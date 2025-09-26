@@ -244,8 +244,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
       await sendToTeamsWebhook(broadcastMessage);
       
-      // Return empty response (no reply to user)
-      return res.status(200).json({});
+      // Return confirmation to user without error
+      return res.status(200).json({
+        text: "📢 Broadcast sent successfully!"
+      });
     }
 
     // Return based on Gemini's format choice
@@ -296,11 +298,13 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // If broadcast, send error to Teams webhook
     if (shouldBroadcast) {
-      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
+      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(errorMessage);
-      return res.status(200).json({});
+      return res.status(200).json({
+        text: "❌ Broadcast failed - error sent to channel"
+      });
     }
-
+    
     res.status(200).json({
       text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
     });
