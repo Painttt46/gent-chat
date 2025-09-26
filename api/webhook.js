@@ -94,21 +94,26 @@ export default async function handler(req, res) {
   
   models[currentModel].count++;
 
-  // Check if user wants to broadcast to everyone (move outside try-catch)
+  // Check if user wants to broadcast (do this early)
   const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
 
   // Clean mention from text
-  let cleanText = req.body?.text || '';
-  cleanText = cleanText.replace(/<at>.*?<\/at>/g, '');
-  cleanText = cleanText.replace(/<[^>]*>/g, '');
-  cleanText = cleanText.replace(/&nbsp;/g, ' ');
-  cleanText = cleanText.replace(/&amp;/g, '&');
-  cleanText = cleanText.replace(/&lt;/g, '<');
-  cleanText = cleanText.replace(/&gt;/g, '>');
-  cleanText = cleanText.replace(/\s+/g, ' ').trim();
+  let processedText = cleanText;
+  processedText = processedText.replace(/<at>.*?<\/at>/g, '');
+  processedText = processedText.replace(/<[^>]*>/g, '');
+  processedText = processedText.replace(/&nbsp;/g, ' ');
+  processedText = processedText.replace(/&amp;/g, '&');
+  processedText = processedText.replace(/&lt;/g, '<');
+  processedText = processedText.replace(/&gt;/g, '>');
+  processedText = processedText.replace(/\s+/g, ' ').trim();
+
+  // Remove (broadcast) from text for processing
+  if (shouldBroadcast) {
+    processedText = processedText.replace(/\(broadcast\)/gi, '').trim();
+  }
 
   // Handle clear command
-  if (cleanText.toLowerCase() === 'clear') {
+  if (processedText.toLowerCase() === 'clear') {
     conversations.delete(userId);
     return res.status(200).json({
       text: "🔄 Conversation cleared! Starting fresh."
@@ -116,8 +121,8 @@ export default async function handler(req, res) {
   }
 
   // Handle model switching
-  if (cleanText.toLowerCase().startsWith('model ')) {
-    const modelKey = cleanText.toLowerCase().replace('model ', '');
+  if (processedText.toLowerCase().startsWith('model ')) {
+    const modelKey = processedText.toLowerCase().replace('model ', '');
     if (models[modelKey]) {
       userModels.set(userId, modelKey);
       return res.status(200).json({
@@ -133,8 +138,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!cleanText) {
-    const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
+  if (!processedText) {
     return res.status(200).json({
       text: `Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today?\n\nCommands:\n• 'clear' - reset conversation\n• 'model <name>' - switch AI model\n\nCurrent: ${models[currentModel].name} (${models[currentModel].count}/${models[currentModel].limit} requests) | API Key: ${currentApiKeyIndex + 1}/2`
     });
@@ -144,13 +148,6 @@ export default async function handler(req, res) {
     // Initialize Gemini AI with current API key
     const genAI = new GoogleGenerativeAI(getCurrentApiKey());
     const model = genAI.getGenerativeModel({ model: currentModel });
-
-    // Check if user wants to broadcast to everyone
-    // const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)'); // Moved outside try-catch
-    
-    // Remove (broadcast) from the message before processing
-    const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
-    const finalText = processedText || cleanText;
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -193,10 +190,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       conversationContext += "\n";
     }
 
-    conversationContext += `Current message from team member: ${finalText}`;
+    conversationContext += `Current message from team member: ${processedText}`;
 
     // Check for "home" API command
-    if (finalText.toLowerCase().includes('home')) {
+    if (processedText.toLowerCase().includes('home')) {
       try {
         const apiData = await fetch('https://api.zippopotam.us/us/33162');
         const jsonData = await apiData.json();
@@ -208,8 +205,8 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // Check if user is asking about an API/URL and fetch it
     const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = finalText.match(urlRegex);
-    if (urls && (finalText.toLowerCase().includes('research') || finalText.toLowerCase().includes('api') || finalText.toLowerCase().includes('check'))) {
+    const urls = processedText.match(urlRegex);
+    if (urls && (processedText.toLowerCase().includes('research') || processedText.toLowerCase().includes('api') || processedText.toLowerCase().includes('check'))) {
       try {
         const apiData = await fetch(urls[0]);
         const jsonData = await apiData.json();
@@ -236,19 +233,17 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
     // Save to conversation history (keep last 10 messages)
-    history.push({ role: "User", content: finalText });
+    history.push({ role: "User", content: processedText });
     history.push({ role: "Gent", content: cleanResponse });
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
-    
+
+    // Handle broadcast
     if (shouldBroadcast) {
-      // Send to Teams incoming webhook with stats
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(broadcastMessage);
-      
-      // Return empty response (no reply to user)
-      return res.status(200).json({});
+      return res.status(200).json({}); // No reply to user
     }
 
     // Return based on Gemini's format choice
@@ -297,11 +292,11 @@ Choose FORMAT:CARD when the response would look better with structured formattin
   } catch (error) {
     console.error('Gemini API error:', error);
 
-    // If broadcast, send error to Teams webhook
+    // Handle broadcast errors
     if (shouldBroadcast) {
       const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(errorMessage);
-      return res.status(200).json({});
+      return res.status(200).json({}); // No reply to user
     }
 
     res.status(200).json({
