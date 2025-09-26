@@ -183,10 +183,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       conversationContext += "\n";
     }
 
-    conversationContext += `Current message from team member: ${cleanText}`;
+    conversationContext += `Current message from team member: ${processedText || cleanText}`;
 
     // Check for "home" API command
-    if (cleanText.toLowerCase().includes('home')) {
+    if ((processedText || cleanText).toLowerCase().includes('home')) {
       try {
         const apiData = await fetch('https://api.zippopotam.us/us/33162');
         const jsonData = await apiData.json();
@@ -198,8 +198,8 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // Check if user is asking about an API/URL and fetch it
     const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = cleanText.match(urlRegex);
-    if (urls && (cleanText.toLowerCase().includes('research') || cleanText.toLowerCase().includes('api') || cleanText.toLowerCase().includes('check'))) {
+    const urls = (processedText || cleanText).match(urlRegex);
+    if (urls && ((processedText || cleanText).toLowerCase().includes('research') || (processedText || cleanText).toLowerCase().includes('api') || (processedText || cleanText).toLowerCase().includes('check'))) {
       try {
         const apiData = await fetch(urls[0]);
         const jsonData = await apiData.json();
@@ -233,12 +233,18 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
     // Check if user wants to broadcast to everyone
-    const shouldBroadcast = cleanText.toLowerCase().includes('everyone') || cleanText.toLowerCase().includes('broadcast') || cleanText.toLowerCase().includes('announce');
+    const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
+    
+    // Remove (broadcast) from the message before processing
+    let processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
     
     if (shouldBroadcast) {
       // Send to Teams incoming webhook
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n_Requested by team member_`;
       await sendToTeamsWebhook(broadcastMessage);
+      
+      // Return empty response (no reply to user)
+      return res.status(200).json({});
     }
 
     // Return based on Gemini's format choice
