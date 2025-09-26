@@ -3,12 +3,29 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
 
+// Model tracking
+const models = {
+  'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0 },
+  'gemini-1.5-pro': { name: 'Gemini 1.5 Pro', count: 0 },
+  'gemini-1.5-flash': { name: 'Gemini 1.5 Flash', count: 0 }
+};
+const userModels = new Map(); // Track current model per user
+
+// Get total requests across all models
+function getTotalRequests() {
+  return Object.values(models).reduce((sum, model) => sum + model.count, 0);
+}
+
 export default async function handler(req, res) {
   console.log('Method:', req.method);
   console.log('Body:', req.body);
 
   // Get user ID from Teams (fallback to 'default' if not available)
   const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
+  
+  // Get current model for user and increment counter for each webhook request
+  const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
+  models[currentModel].count++;
 
   // Clean mention from text
   let cleanText = req.body?.text || '';
@@ -28,16 +45,35 @@ export default async function handler(req, res) {
     });
   }
 
+  // Handle model switching
+  if (cleanText.toLowerCase().startsWith('model ')) {
+    const modelKey = cleanText.toLowerCase().replace('model ', '');
+    if (models[modelKey]) {
+      userModels.set(userId, modelKey);
+      return res.status(200).json({
+        text: `🤖 Switched to ${models[modelKey].name} (${models[modelKey].count} requests)`
+      });
+    } else {
+      const modelList = Object.entries(models).map(([key, model]) => 
+        `• ${key} - ${model.name} (${model.count} requests)`
+      ).join('\n');
+      return res.status(200).json({
+        text: `❌ Invalid model. Available models:\n${modelList}\n\nTotal: ${getTotalRequests()} requests\nUsage: model gemini-2.5-flash`
+      });
+    }
+  }
+
   if (!cleanText) {
+    const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
     return res.status(200).json({
-      text: "Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today? (Type 'clear' to reset conversation)"
+      text: `Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today?\n\nCommands:\n• 'clear' - reset conversation\n• 'model <name>' - switch AI model\n\nCurrent: ${models[currentModel].name} (${models[currentModel].count} requests)`
     });
   }
 
   try {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: currentModel });
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -130,7 +166,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
               },
               {
                 type: "TextBlock",
-                text: `💬 ${history.length / 2} messages in conversation | Type 'clear' to reset`,
+                text: `💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests | Type 'clear' to reset`,
                 size: "Small",
                 color: "Accent",
                 spacing: "Medium"
@@ -142,7 +178,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     } else {
       // Return as simple text
       res.status(200).json({
-        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | Type 'clear' to reset`
+        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 ${history.length / 2} messages | ${models[currentModel].name} | ${models[currentModel].count} requests | Type 'clear' to reset`
       });
     }
 
