@@ -244,8 +244,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(broadcastMessage);
       
-      // Send empty response for successful broadcast
-      return res.status(200).send();
+      return res.status(200).end();
     }
 
     // Return based on Gemini's format choice
