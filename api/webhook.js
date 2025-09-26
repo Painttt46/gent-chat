@@ -240,8 +240,8 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
     
     if (shouldBroadcast) {
-      // Send to Teams incoming webhook
-      const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n_Requested by team member_`;
+      // Send to Teams incoming webhook with stats
+      const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
       await sendToTeamsWebhook(broadcastMessage);
       
       // Return empty response (no reply to user)
@@ -293,6 +293,13 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
   } catch (error) {
     console.error('Gemini API error:', error);
+
+    // If broadcast, send error to Teams webhook
+    if (shouldBroadcast) {
+      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**\n\n_Requested by team member_`;
+      await sendToTeamsWebhook(errorMessage);
+      return res.status(200).json({});
+    }
 
     res.status(200).json({
       text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
