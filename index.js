@@ -1,4 +1,5 @@
-module.exports = (req, res) => {
+
+export default (req, res) => {
   if (req.method === 'POST') {
     res.json({ text: `Echo: ${req.body?.text || 'Hello!'}` });
   } else {
