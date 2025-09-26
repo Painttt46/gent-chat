@@ -17,6 +17,23 @@ function getCurrentApiKey() {
   return currentApiKeyIndex === 0 ? process.env.GEMINI_API_KEY : process.env.GEMINI_API_KEY_2;
 }
 
+// Send message to Teams incoming webhook
+async function sendToTeamsWebhook(message) {
+  const webhookUrl = 'https://gentsolutions.webhook.office.com/webhookb2/330ce018-1d89-4bde-8a00-7e112b710934@c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906/IncomingWebhook/d5ec6936083f44f7aaf575f90b1f69da/0b176f81-19e0-4b39-8fc8-378244861f9b/V2FcW5LeJmT5RLRTWJR9gSZLh55QhBpny4Nll4VGmIk4I1';
+  
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message })
+    });
+    return true;
+  } catch (error) {
+    console.error('Teams webhook error:', error);
+    return false;
+  }
+}
+
 // Check if model hit limit and switch API key if needed
 function checkLimitsAndSwitchKey(modelKey) {
   const model = models[modelKey];
@@ -213,6 +230,15 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     history.push({ role: "Gent", content: cleanResponse });
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
+    }
+
+    // Check if user wants to broadcast to everyone
+    const shouldBroadcast = cleanText.toLowerCase().includes('everyone') || cleanText.toLowerCase().includes('broadcast') || cleanText.toLowerCase().includes('announce');
+    
+    if (shouldBroadcast) {
+      // Send to Teams incoming webhook
+      const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n_Requested by team member_`;
+      await sendToTeamsWebhook(broadcastMessage);
     }
 
     // Return based on Gemini's format choice
