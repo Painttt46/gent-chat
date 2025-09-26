@@ -3,13 +3,32 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
 
-// Model tracking
+// Model tracking with limits
 const models = {
-  'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0 },
-  'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0 }
+  'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0, limit: 500 },
+  'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0, limit: 100 }
 };
 const userModels = new Map(); // Track current model per user
 let lastResetDate = new Date().toDateString();
+let currentApiKeyIndex = 0; // 0 for primary, 1 for secondary
+
+// Get current API key
+function getCurrentApiKey() {
+  return currentApiKeyIndex === 0 ? process.env.GEMINI_API_KEY : process.env.GEMINI_API_KEY_2;
+}
+
+// Check if model hit limit and switch API key if needed
+function checkLimitsAndSwitchKey(modelKey) {
+  const model = models[modelKey];
+  if (model.count >= model.limit) {
+    // Switch to other API key
+    currentApiKeyIndex = currentApiKeyIndex === 0 ? 1 : 0;
+    // Reset all counters when switching
+    Object.keys(models).forEach(key => models[key].count = 0);
+    return true; // Switched
+  }
+  return false; // No switch
+}
 
 // Reset counters daily
 function checkDailyReset() {
@@ -37,6 +56,10 @@ export default async function handler(req, res) {
   
   // Get current model for user and increment counter for each webhook request
   const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
+  
+  // Check limits and switch API key if needed
+  const switched = checkLimitsAndSwitchKey(currentModel);
+  
   models[currentModel].count++;
 
   // Clean mention from text
@@ -63,14 +86,14 @@ export default async function handler(req, res) {
     if (models[modelKey]) {
       userModels.set(userId, modelKey);
       return res.status(200).json({
-        text: `🤖 Switched to ${models[modelKey].name} (${models[modelKey].count} requests)`
+        text: `🤖 Switched to ${models[modelKey].name} (${models[modelKey].count}/${models[modelKey].limit} requests)`
       });
     } else {
       const modelList = Object.entries(models).map(([key, model]) => 
-        `• ${key} - ${model.name} (${model.count} requests)`
+        `• ${key} - ${model.name} (${model.count}/${model.limit} requests)`
       ).join('\n');
       return res.status(200).json({
-        text: `❌ Invalid model. Available models:\n${modelList}\n\nTotal: ${getTotalRequests()} requests\nUsage: model gemini-2.5-flash`
+        text: `❌ Invalid model. Available models:\n${modelList}\n\nAPI Key: ${currentApiKeyIndex + 1}/2\nUsage: model gemini-2.5-flash`
       });
     }
   }
@@ -78,13 +101,13 @@ export default async function handler(req, res) {
   if (!cleanText) {
     const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
     return res.status(200).json({
-      text: `Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today?\n\nCommands:\n• 'clear' - reset conversation\n• 'model <name>' - switch AI model\n\nCurrent: ${models[currentModel].name} (${models[currentModel].count} requests)`
+      text: `Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today?\n\nCommands:\n• 'clear' - reset conversation\n• 'model <name>' - switch AI model\n\nCurrent: ${models[currentModel].name} (${models[currentModel].count}/${models[currentModel].limit} requests) | API Key: ${currentApiKeyIndex + 1}/2`
     });
   }
 
   try {
-    // Initialize Gemini AI
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    // Initialize Gemini AI with current API key
+    const genAI = new GoogleGenerativeAI(getCurrentApiKey());
     const model = genAI.getGenerativeModel({ model: currentModel });
 
     // Get or create conversation history for this user
@@ -178,7 +201,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
               },
               {
                 type: "TextBlock",
-                text: `💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count} requests**`,
+                text: `💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`,
                 size: "Small",
                 color: "Good",
                 weight: "Bolder",
@@ -191,7 +214,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     } else {
       // Return as simple text
       res.status(200).json({
-        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count} requests**`
+        text: `🤖 **Gent:** ${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`
       });
     }
 
