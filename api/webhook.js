@@ -80,10 +80,7 @@ async function findUserByShortName(name) {
 // Microsoft Search API function
 async function searchCalendarEvents(queryString) {
     try {
-        console.log('Starting search for:', queryString);
         const token = await getGraphToken();
-        console.log('Token acquired for search');
-        
         const url = 'https://graph.microsoft.com/v1.0/search/query';
         
         const requestBody = {
@@ -106,8 +103,6 @@ async function searchCalendarEvents(queryString) {
                 }
             ]
         };
-
-        console.log('Search request body:', JSON.stringify(requestBody, null, 2));
         
         const response = await fetch(url, {
             method: 'POST',
@@ -118,19 +113,14 @@ async function searchCalendarEvents(queryString) {
             body: JSON.stringify(requestBody)
         });
         
-        console.log('Search response status:', response.status);
-        
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Search API error response:', errorText);
             return { error: `Search failed: HTTP ${response.status} - ${errorText}` };
         }
         
         const data = await response.json();
-        console.log('Search response data:', JSON.stringify(data, null, 2));
         return data;
     } catch (error) {
-        console.error('Search API error:', error);
         return { error: `Search error: ${error.message}` };
     }
 }
@@ -393,47 +383,60 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     // Send message and handle function calls
     const result = await chat.sendMessage(finalText);
     let response = result.response;
-    let text;
 
     const functionCalls = response.functionCalls();
+    let text; // <-- ย้ายตัวแปร text มาประกาศตรงนี้
 
     if (functionCalls && functionCalls.length > 0) {
-      console.log("Gemini wants to call a function...");
-      const call = functionCalls[0];
+        console.log("Gemini wants to call a function...");
+        const call = functionCalls[0];
+        let functionResponseResult; // ตัวแปรสำหรับเก็บผลลัพธ์จาก API
 
-      if (call.name === "get_user_calendar") {
-        const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
+        // --- ส่วนที่แก้ไข เริ่มต้นที่นี่ ---
 
-        if (!userEmail) {
-          text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
+        if (call.name === "get_user_calendar") {
+            // ใช้ชื่อพารามิเตอร์ให้ตรงกับที่ประกาศใน Function Declaration
+            const nameOrEmail = call.args?.userPrincipalName;
+            
+            if (!nameOrEmail) {
+                functionResponseResult = { error: "User name or email not provided." };
+            } else {
+                const calendarData = await getUserCalendar(nameOrEmail);
+                functionResponseResult = calendarData.value || calendarData; // ส่งผลลัพธ์กลับไป
+            }
+
+        } else if (call.name === "search_calendar_events") {
+            const queryString = call.args?.queryString;
+
+            if (!queryString) {
+                functionResponseResult = { error: "Search query string not provided." };
+            } else {
+                const searchData = await searchCalendarEvents(queryString);
+                // Search API มีโครงสร้างซับซ้อน ควรส่งกลับเฉพาะส่วนที่สำคัญ
+                functionResponseResult = searchData.value?.[0]?.hitsContainers?.[0]?.hits || searchData;
+            }
         } else {
-          const calendarData = await getUserCalendar(userEmail);
-
-          // Create a new chat with function result
-          const newChat = model.startChat({ history });
-          const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
-          const finalResult = await newChat.sendMessage(contextMessage);
-          text = finalResult.response.text();
+            functionResponseResult = { error: "Unknown function called." };
         }
-      } else if (call.name === "search_calendar_events") {
-        const queryString = call.args?.queryString;
 
-        if (!queryString) {
-          text = "กรุณาระบุคำค้นหาที่ต้องการครับ/คะ";
-        } else {
-          const searchData = await searchCalendarEvents(queryString);
+        // ส่งผลลัพธ์ของฟังก์ชันกลับเข้าไปใน "chat session เดิม"
+        const result = await chat.sendMessage([
+            {
+                functionResponse: {
+                    name: call.name,
+                    response: {
+                        result: functionResponseResult
+                    }
+                }
+            }
+        ]);
+        
+        text = result.response.text();
 
-          // Create a new chat with search results
-          const newChat = model.startChat({ history });
-          const contextMessage = `User searched for: ${queryString}\n\nSearch results: ${JSON.stringify(searchData, null, 2)}`;
-          const finalResult = await newChat.sendMessage(contextMessage);
-          text = finalResult.response.text();
-        }
-      } else {
-        text = "Unknown function called.";
-      }
+        // --- จบส่วนที่แก้ไข ---
+
     } else {
-      text = response.text();
+        text = response.text();
     }
 
     // Parse format choice
