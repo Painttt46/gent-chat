@@ -199,19 +199,9 @@ export default async function handler(req, res) {
       }
     };
 
-    const model = genAI.getGenerativeModel({ 
-      model: currentModel,
-      tools: [{ functionDeclarations: [calendarFunction] }]
-    });
-
-    // Get or create conversation history for this user
-    if (!conversations.has(userId)) {
-      conversations.set(userId, []);
-    }
-    const history = conversations.get(userId);
-
-    // Build conversation context with agent prompt
-    let conversationContext = `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
+    // กำหนดเป็น Object ที่มีโครงสร้าง { parts: [...] }
+    const systemInstruction = {
+      parts: [{ text: `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
 
 Your role:
 - Provide professional, helpful assistance to office workers
@@ -232,15 +222,23 @@ Response format instructions:
   * When providing examples or templates
   * When the information would benefit from better formatting
 
-Choose FORMAT:CARD when the response would look better with structured formatting.
+Choose FORMAT:CARD when the response would look better with structured formatting.`}]
+    };
 
-`;
-
-    // Start chat session with history and system prompt
-    const chat = model.startChat({ 
-      history,
-      systemInstruction: conversationContext
+    const model = genAI.getGenerativeModel({ 
+      model: currentModel,
+      tools: [{ functionDeclarations: [calendarFunction] }],
+      systemInstruction: systemInstruction
     });
+
+    // Get or create conversation history for this user
+    if (!conversations.has(userId)) {
+      conversations.set(userId, []);
+    }
+    const history = conversations.get(userId);
+
+    // Start chat session with history
+    const chat = model.startChat({ history });
 
     // Send message and handle function calls
     const result = await chat.sendMessage(finalText);
