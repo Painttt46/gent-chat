@@ -1,3 +1,4 @@
+
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 // Simple in-memory conversation storage (per user)
@@ -27,18 +28,18 @@ async function getGraphToken() {
         authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`
       }
     };
-
+    
     console.log('Azure config:', {
       clientId: process.env.AZURE_CLIENT_ID ? 'Set' : 'Missing',
       clientSecret: process.env.AZURE_CLIENT_SECRET ? 'Set' : 'Missing',
       tenantId: process.env.AZURE_TENANT_ID ? 'Set' : 'Missing'
     });
-
+    
     const cca = new ConfidentialClientApplication(clientConfig);
     const clientCredentialRequest = {
       scopes: ['https://graph.microsoft.com/.default']
     };
-
+    
     const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
     console.log('Token acquired successfully');
     return response.accessToken;
@@ -50,129 +51,83 @@ async function getGraphToken() {
 
 // ฟังก์ชันใหม่สำหรับ "ค้นหา" ผู้ใช้จากชื่อ
 async function findUserByShortName(name) {
-  try {
-    const token = await getGraphToken();
-    // สร้าง query เพื่อค้นหาจาก ชื่อที่แสดง, ชื่อจริง, หรือชื่อเล่นในอีเมล
-    const filterQuery = `$filter=startswith(displayName,'${name}') or startswith(givenName,'${name}') or startswith(mailNickname,'${name}')`;
-    const selectQuery = `&$select=displayName,userPrincipalName`;
-    const url = `https://graph.microsoft.com/v1.0/users?${filterQuery}${selectQuery}`;
-
-    console.log('Searching for user with URL:', url);
-
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Graph API user search error:', errorText);
-      return { error: `HTTP ${response.status}: ${errorText}` };
-    }
-
-    const data = await response.json();
-    return data.value; // คืนค่าเป็น array ของ users ที่เจอ
-  } catch (error) {
-    console.error('findUserByShortName error:', error);
-    return { error: error.message };
-  }
-}
-
-// Microsoft Search API function
-async function searchCalendarEvents(queryString) {
     try {
         const token = await getGraphToken();
-        const url = 'https://graph.microsoft.com/v1.0/search/query';
-        
-        const requestBody = {
-            requests: [
-                {
-                    entityTypes: ["event"],
-                    query: {
-                        queryString: queryString
-                    },
-                    fields: [
-                        "subject",
-                        "organizer", 
-                        "start",
-                        "end",
-                        "attendees",
-                        "webLink"
-                    ],
-                    from: 0,
-                    size: 25
-                }
-            ]
-        };
+        // สร้าง query เพื่อค้นหาจาก ชื่อที่แสดง, ชื่อจริง, หรือชื่อเล่นในอีเมล
+        const filterQuery = `$filter=startswith(displayName,'${name}') or startswith(givenName,'${name}') or startswith(mailNickname,'${name}')`;
+        const selectQuery = `&$select=displayName,userPrincipalName`;
+        const url = `https://graph.microsoft.com/v1.0/users?${filterQuery}${selectQuery}`;
+
+        console.log('Searching for user with URL:', url);
         
         const response = await fetch(url, {
-            method: 'POST',
-            headers: { 
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Graph API user search error:', errorText);
+            return { error: `HTTP ${response.status}: ${errorText}` };
+        }
+        
+        const data = await response.json();
+        return data.value; // คืนค่าเป็น array ของ users ที่เจอ
+    } catch (error) {
+        console.error('findUserByShortName error:', error);
+        return { error: error.message };
+    }
+}
+
+// ปรับแก้ฟังก์ชัน getUserCalendar เดิม
+async function getUserCalendar(nameOrEmail) {
+    let userEmail = nameOrEmail;
+
+    // ถ้าเป็นอีเมลแล้ว ให้ใช้เลย ถ้าไม่ใช่ ให้ค้นหาจากชื่อ
+    if (!nameOrEmail.includes('@')) {
+        console.log(`Searching for user: '${nameOrEmail}'`);
+        const users = await findUserByShortName(nameOrEmail);
+
+        if (!users || users.length === 0) {
+            return { error: `ไม่พบผู้ใช้ที่ชื่อ '${nameOrEmail}' ในระบบครับ` };
+        }
+        if (users.length > 1) {
+            const userList = users.map(u => u.displayName).join(', ');
+            return { error: `พบผู้ใช้ที่ชื่อ '${nameOrEmail}' มากกว่า 1 คน: ${userList} กรุณาระบุให้ชัดเจนขึ้นครับ` };
+        }
+        
+        userEmail = users[0].userPrincipalName;
+        console.log(`User found: ${users[0].displayName} (${userEmail})`);
+    }
+
+    try {
+        const token = await getGraphToken();
+        const today = new Date();
+        const startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+        const endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+        const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,organizer,start,end,location`;
+        
+        console.log('Fetching calendar for:', userEmail);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (!response.ok) {
             const errorText = await response.text();
-            return { error: `Search failed: HTTP ${response.status} - ${errorText}` };
+            console.error('Graph API error response:', errorText);
+            return { error: `ไม่สามารถดึงข้อมูลปฏิทินของ ${userEmail} ได้ครับ` };
         }
         
         const data = await response.json();
         return data;
     } catch (error) {
-        return { error: `Search error: ${error.message}` };
+        console.error('Graph API error:', error);
+        return { error: error.message };
     }
-}
-async function getUserCalendar(nameOrEmail) {
-  let userEmail = nameOrEmail;
-
-  // ถ้าเป็นอีเมลแล้ว ให้ใช้เลย ถ้าไม่ใช่ ให้ค้นหาจากชื่อ
-  if (!nameOrEmail.includes('@')) {
-    console.log(`Searching for user: '${nameOrEmail}'`);
-    const users = await findUserByShortName(nameOrEmail);
-
-    if (!users || users.length === 0) {
-      return { error: `ไม่พบผู้ใช้ที่ชื่อ '${nameOrEmail}' ในระบบครับ` };
-    }
-    if (users.length > 1) {
-      const userList = users.map(u => u.displayName).join(', ');
-      return { error: `พบผู้ใช้ที่ชื่อ '${nameOrEmail}' มากกว่า 1 คน: ${userList} กรุณาระบุให้ชัดเจนขึ้นครับ` };
-    }
-
-    userEmail = users[0].userPrincipalName;
-    console.log(`User found: ${users[0].displayName} (${userEmail})`);
-  }
-
-  try {
-    const token = await getGraphToken();
-    const today = new Date();
-    const startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-    const endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-    const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,organizer,start,end,location`;
-
-    console.log('Fetching calendar for:', userEmail);
-
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Graph API error response:', errorText);
-      return { error: `ไม่สามารถดึงข้อมูลปฏิทินของ ${userEmail} ได้ครับ` };
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Graph API error:', error);
-    return { error: error.message };
-  }
 }
 async function sendToTeamsWebhook(message) {
   const webhookUrl = 'https://gentsolutions.webhook.office.com/webhookb2/330ce018-1d89-4bde-8a00-7e112b710934@c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906/IncomingWebhook/d5ec6936083f44f7aaf575f90b1f69da/0b176f81-19e0-4b39-8fc8-378244861f9b/V2FcW5LeJmT5RLRTWJR9gSZLh55QhBpny4Nll4VGmIk4I1';
-
+  
   try {
     await fetch(webhookUrl, {
       method: 'POST',
@@ -192,13 +147,13 @@ function checkLimitsAndSwitchKey(modelKey) {
   if (model.count >= model.limit) {
     // Try to switch to other API key
     const newApiKeyIndex = currentApiKeyIndex === 0 ? 1 : 0;
-
+    
     // Check if we've already tried both keys (both are maxed)
     const allModelsMaxed = Object.values(models).every(m => m.count >= m.limit);
     if (allModelsMaxed) {
       return 'MAXED_OUT';
     }
-
+    
     // Switch to other API key and reset counters
     currentApiKeyIndex = newApiKeyIndex;
     Object.keys(models).forEach(key => models[key].count = 0);
@@ -230,20 +185,20 @@ export default async function handler(req, res) {
 
   // Get user ID from Teams (fallback to 'default' if not available)
   const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
-
+  
   // Get current model for user and increment counter for each webhook request
   const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
-
+  
   // Check limits and switch API key if needed
   const switched = checkLimitsAndSwitchKey(currentModel);
-
+  
   // If both API keys are maxed out, return error
   if (switched === 'MAXED_OUT') {
     return res.status(200).json({
       text: `⚠️ **Daily quota exceeded!** Both API keys have reached their limits:\n• Gemini 2.5 Flash: ${models['gemini-2.5-flash'].limit} requests\n• Gemini 2.5 Pro: ${models['gemini-2.5-pro'].limit} requests\n\nPlease try again tomorrow when counters reset.`
     });
   }
-
+  
   models[currentModel].count++;
 
   // Clean mention from text
@@ -273,7 +228,7 @@ export default async function handler(req, res) {
         text: `🤖 Switched to ${models[modelKey].name} (${models[modelKey].count}/${models[modelKey].limit} requests)`
       });
     } else {
-      const modelList = Object.entries(models).map(([key, model]) =>
+      const modelList = Object.entries(models).map(([key, model]) => 
         `• ${key} - ${model.name} (${model.count}/${model.limit} requests)`
       ).join('\n');
       return res.status(200).json({
@@ -292,15 +247,15 @@ export default async function handler(req, res) {
   try {
     // Check if user wants to broadcast to everyone
     const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
-
+    
     // Remove (broadcast) from the message before processing
     const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
     const finalText = processedText || cleanText;
 
     // Initialize Gemini AI with current API key and function calling
     const genAI = new GoogleGenerativeAI(getCurrentApiKey());
-
-    // Define functions for calendar access and search
+    
+    // Define function for calendar access
     const calendarFunction = {
       name: "get_user_calendar",
       description: "Get calendar events for today for a specific user. You can use either their name (like 'weraprat', 'natsarin') or full email address. The system will automatically find the user in the company directory.",
@@ -316,38 +271,16 @@ export default async function handler(req, res) {
       }
     };
 
-    const searchFunction = {
-      name: "search_calendar_events",
-      description: "Search for calendar events across the organization using keywords or event names. Use this when users want to find specific events or tasks.",
-      parameters: {
-        type: "OBJECT",
-        properties: {
-          "queryString": {
-            type: "STRING",
-            description: "Search keywords or event name to find in calendar events. Examples: 'งาน ติดตั้ง monitor', 'meeting with client', 'project review'"
-          }
-        },
-        required: ["queryString"]
-      }
-    };
-
     // กำหนดเป็น Object ที่มีโครงสร้าง { parts: [...] }
     const systemInstruction = {
-      parts: [{
-        text: `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
+      parts: [{ text: `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
 
 Your role:
 - Provide professional, helpful assistance to office workers
 - Be friendly, concise, and actionable in your responses
 - You're part of the team conversation in this Teams channel
 - Help with work-related questions, productivity tips, and general office support
-- You can access calendar information for any company employee using their name
-
-IMPORTANT: When calling the get_user_calendar function, always use the COMPLETE name mentioned by the user. For example:
-- If user says "Natsarin" → use "Natsarin" (not just "N")
-- If user says "Weraprat" → use "Weraprat" (not just "W")
-- If user says "John Smith" → use "John Smith" (not just "J")
-Extract the full name exactly as mentioned in the user's message.
+- You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
@@ -359,15 +292,14 @@ Response format instructions:
   * Professional advice or recommendations
   * When the user asks "how to" questions
   * When providing examples or templates
-  * Technical documentation with code examples
-
+  * When the information would benefit from better formatting
 
 Choose FORMAT:CARD when the response would look better with structured formatting.`}]
     };
 
-    const model = genAI.getGenerativeModel({
+    const model = genAI.getGenerativeModel({ 
       model: currentModel,
-      tools: [{ functionDeclarations: [calendarFunction, searchFunction] }],
+      tools: [{ functionDeclarations: [calendarFunction] }],
       systemInstruction: systemInstruction
     });
 
@@ -383,58 +315,31 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     // Send message and handle function calls
     const result = await chat.sendMessage(finalText);
     let response = result.response;
+    let text;
 
     const functionCalls = response.functionCalls();
-    let text; // <-- ย้ายตัวแปร text มาประกาศตรงนี้
 
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        let functionResponseResult; // ตัวแปรสำหรับเก็บผลลัพธ์จาก API
-
-        // --- ส่วนที่แก้ไข เริ่มต้นที่นี่ ---
-
+        
         if (call.name === "get_user_calendar") {
-            // ใช้ชื่อพารามิเตอร์ให้ตรงกับที่ประกาศใน Function Declaration
-            const nameOrEmail = call.args?.userPrincipalName;
+            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
             
-            if (!nameOrEmail) {
-                functionResponseResult = { error: "User name or email not provided." };
+            if (!userEmail) {
+                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
             } else {
-                const calendarData = await getUserCalendar(nameOrEmail);
-                functionResponseResult = calendarData.value || calendarData; // ส่งผลลัพธ์กลับไป
-            }
-
-        } else if (call.name === "search_calendar_events") {
-            const queryString = call.args?.queryString;
-
-            if (!queryString) {
-                functionResponseResult = { error: "Search query string not provided." };
-            } else {
-                const searchData = await searchCalendarEvents(queryString);
-                // Search API มีโครงสร้างซับซ้อน ควรส่งกลับเฉพาะส่วนที่สำคัญ
-                functionResponseResult = searchData.value?.[0]?.hitsContainers?.[0]?.hits || searchData;
+                const calendarData = await getUserCalendar(userEmail);
+                
+                // Create a new chat with function result
+                const newChat = model.startChat({ history });
+                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
+                const finalResult = await newChat.sendMessage(contextMessage);
+                text = finalResult.response.text();
             }
         } else {
-            functionResponseResult = { error: "Unknown function called." };
+            text = "Unknown function called.";
         }
-
-        // ส่งผลลัพธ์ของฟังก์ชันกลับเข้าไปใน "chat session เดิม"
-        const result = await chat.sendMessage([
-            {
-                functionResponse: {
-                    name: call.name,
-                    response: {
-                        result: functionResponseResult
-                    }
-                }
-            }
-        ]);
-        
-        text = result.response.text();
-
-        // --- จบส่วนที่แก้ไข ---
-
     } else {
         text = response.text();
     }
@@ -456,12 +361,12 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
-
+    
     if (shouldBroadcast) {
       // Send to Teams incoming webhook with stats
       const broadcastMessage = `🔊 **Announcement from Gent:**\n\n${cleanResponse}\n\n💬 **${history.length / 2} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(broadcastMessage);
-
+      
       return res.status(200).json({
         text: "📢 Broadcast sent successfully!"
       });
@@ -525,7 +430,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
         text: "❌ Broadcast failed - error sent to channel"
       });
     }
-
+    
     res.status(200).json({
       text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
     });
