@@ -279,7 +279,15 @@ Your role:
 - Be friendly, concise, and actionable in your responses
 - You're part of the team conversation in this Teams channel
 - Help with work-related questions, productivity tips, and general office support
-- You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
+- You can access calendar information for any company employee using just their first name
+
+IMPORTANT: When users ask for multiple people's calendars (like "Tada และ Weraprat"), explain that you can only check one person at a time and ask them to specify which person they want to check first.
+
+IMPORTANT: When calling the get_user_calendar function, always use the COMPLETE name mentioned by the user. For example:
+- If user says "Natsarin" → use "Natsarin" (not just "N")
+- If user says "Weraprat" → use "Weraprat" (not just "W")
+- If user says "Tada" → use "Tada" (not just "T")
+Extract the full name exactly as mentioned in the user's message.
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
@@ -342,9 +350,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
                 {
                     functionResponse: {
                         name: call.name,
-                        response: {
-                            result: functionResponseResult
-                        }
+                        response: functionResponseResult
                     }
                 }
             ]);
