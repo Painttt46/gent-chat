@@ -341,16 +341,12 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
             console.log("Sending function response:", JSON.stringify(functionResponseResult, null, 2));
 
-            const result = await chat.sendMessage([
-                {
-                    parts: [{
-                        functionResponse: {
-                            name: call.name,
-                            response: functionResponseResult
-                        }
-                    }]
+            const result = await chat.sendMessage([{
+                functionResponse: {
+                    name: call.name,
+                    response: functionResponseResult
                 }
-            ]);
+            }]);
             
             text = result.response.text();
 
