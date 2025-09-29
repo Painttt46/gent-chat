@@ -279,15 +279,7 @@ Your role:
 - Be friendly, concise, and actionable in your responses
 - You're part of the team conversation in this Teams channel
 - Help with work-related questions, productivity tips, and general office support
-- You can access calendar information for any company employee using just their first name
-
-IMPORTANT: When users ask for multiple people's calendars (like "Tada และ Weraprat"), explain that you can only check one person at a time and ask them to specify which person they want to check first.
-
-IMPORTANT: When calling the get_user_calendar function, always use the COMPLETE name mentioned by the user. For example:
-- If user says "Natsarin" → use "Natsarin" (not just "N")
-- If user says "Weraprat" → use "Weraprat" (not just "W")
-- If user says "Tada" → use "Tada" (not just "T")
-Extract the full name exactly as mentioned in the user's message.
+- You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
@@ -325,42 +317,28 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     let text;
 
     const functionCalls = response.functionCalls();
-    let text;
 
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        let functionResponseResult;
-
+        
         if (call.name === "get_user_calendar") {
-            const nameOrEmail = call.args?.userPrincipalName;
+            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
             
-            if (!nameOrEmail) {
-                functionResponseResult = { error: "User name or email not provided." };
+            if (!userEmail) {
+                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
             } else {
-                const calendarData = await getUserCalendar(nameOrEmail);
-                functionResponseResult = calendarData.value || calendarData;
+                const calendarData = await getUserCalendar(userEmail);
+                
+                // Create a new chat with function result
+                const newChat = model.startChat({ history });
+                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
+                const finalResult = await newChat.sendMessage(contextMessage);
+                text = finalResult.response.text();
             }
         } else {
-            functionResponseResult = { error: "Unknown function called." };
+            text = "Unknown function called.";
         }
-
-        try {
-            const result = await chat.sendMessage([
-                {
-                    functionResponse: {
-                        name: call.name,
-                        response: functionResponseResult
-                    }
-                }
-            ]);
-            
-            text = result.response.text();
-        } catch (functionError) {
-            console.error("Function response error:", functionError);
-            text = "ขออภัยครับ มีปัญหาในการประมวลผลข้อมูลปฏิทิน กรุณาลองใหม่อีกครั้งครับ";
-        }
-
     } else {
         text = response.text();
     }
