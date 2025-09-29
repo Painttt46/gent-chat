@@ -257,13 +257,13 @@ export default async function handler(req, res) {
     // Define function for calendar access
     const calendarFunction = {
       name: "get_user_calendar",
-      description: "Get calendar events for today for a specific user using their email address.",
+      description: "Get calendar events for today for a specific user. You can use either their name (like 'weraprat', 'natsarin') or full email address. The system will automatically find the user in the company directory.",
       parameters: {
         type: "OBJECT",
         properties: {
           "userPrincipalName": {
             type: "STRING",
-            description: "The user's email address (User Principal Name), for example 'john.doe@example.com'."
+            description: "The user's name or email address. Examples: 'weraprat', 'natsarin', or 'weraprat@gent-s.com'. Just the first name is usually enough."
           }
         },
         required: ["userPrincipalName"]
@@ -279,7 +279,7 @@ Your role:
 - Be friendly, concise, and actionable in your responses
 - You're part of the team conversation in this Teams channel
 - Help with work-related questions, productivity tips, and general office support
-- You can research APIs and URLs when asked
+- You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
