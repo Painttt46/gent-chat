@@ -330,10 +330,13 @@ Choose FORMAT:CARD when the response would look better with structured formattin
             } else {
                 const calendarData = await getUserCalendar(userEmail);
                 
-                // Create a new chat with function result
-                const newChat = model.startChat({ history });
-                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
-                const finalResult = await newChat.sendMessage(contextMessage);
+                // Send function response back to the same chat
+                const finalResult = await chat.sendMessage([{
+                    functionResponse: {
+                        name: "get_user_calendar",
+                        response: calendarData
+                    }
+                }]);
                 text = finalResult.response.text();
             }
         } else {
