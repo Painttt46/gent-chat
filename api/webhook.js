@@ -321,24 +321,47 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        
-        if (call.name === "get_user_calendar") {
-            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
-            
-            if (!userEmail) {
-                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
-            } else {
-                const calendarData = await getUserCalendar(userEmail);
+        let functionResponseResult;
+
+        try {
+            if (call.name === "get_user_calendar") {
+                const nameOrEmail = call.args?.userPrincipalName;
+                console.log("Calendar request for:", nameOrEmail);
                 
-                // Create a new chat with function result
-                const newChat = model.startChat({ history });
-                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
-                const finalResult = await newChat.sendMessage(contextMessage);
-                text = finalResult.response.text();
+                if (!nameOrEmail) {
+                    functionResponseResult = { error: "User name or email not provided." };
+                } else {
+                    const calendarData = await getUserCalendar(nameOrEmail);
+                    console.log("Calendar data received:", calendarData);
+                    functionResponseResult = calendarData.value || calendarData;
+                }
+            } else {
+                functionResponseResult = { error: "Unknown function called." };
             }
-        } else {
-            text = "Unknown function called.";
+
+            console.log("Sending function response:", JSON.stringify(functionResponseResult, null, 2));
+
+            const result = await chat.sendMessage([
+                {
+                    functionResponse: {
+                        name: call.name,
+                        response: functionResponseResult
+                    }
+                }
+            ]);
+            
+            text = result.response.text();
+
+        } catch (functionError) {
+            console.error("=== FUNCTION ERROR ===");
+            console.error("Error:", functionError);
+            console.error("Error message:", functionError.message);
+            console.error("Error stack:", functionError.stack);
+            console.error("=== END FUNCTION ERROR ===");
+            
+            text = `❌ Function Error: ${functionError.message}`;
         }
+
     } else {
         text = response.text();
     }
