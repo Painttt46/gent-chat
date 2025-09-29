@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
+import { ConfidentialClientApplication } from '@azure/msal-node';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
 
@@ -17,7 +17,42 @@ function getCurrentApiKey() {
   return currentApiKeyIndex === 0 ? process.env.GEMINI_API_KEY : process.env.GEMINI_API_KEY_2;
 }
 
-// Send message to Teams incoming webhook
+// Get Graph API access token
+async function getGraphToken() {
+  const clientConfig = {
+    auth: {
+      clientId: process.env.AZURE_CLIENT_ID,
+      clientSecret: process.env.AZURE_CLIENT_SECRET,
+      authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`
+    }
+  };
+  
+  const cca = new ConfidentialClientApplication(clientConfig);
+  const clientCredentialRequest = {
+    scopes: ['https://graph.microsoft.com/.default']
+  };
+  
+  const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
+  return response.accessToken;
+}
+
+// Get user calendar for today
+async function getUserCalendar(userEmail) {
+  try {
+    const token = await getGraphToken();
+    const today = new Date().toISOString().split('T')[0];
+    const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${today}T00:00:00Z&endDateTime=${today}T23:59:59Z&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
+    
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Graph API error:', error);
+    return null;
+  }
+}
 async function sendToTeamsWebhook(message) {
   const webhookUrl = 'https://gentsolutions.webhook.office.com/webhookb2/330ce018-1d89-4bde-8a00-7e112b710934@c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906/IncomingWebhook/d5ec6936083f44f7aaf575f90b1f69da/0b176f81-19e0-4b39-8fc8-378244861f9b/V2FcW5LeJmT5RLRTWJR9gSZLh55QhBpny4Nll4VGmIk4I1';
   
@@ -145,9 +180,29 @@ export default async function handler(req, res) {
     const processedText = cleanText.replace(/\(broadcast\)/gi, '').trim();
     const finalText = processedText || cleanText;
 
-    // Initialize Gemini AI with current API key
+    // Initialize Gemini AI with current API key and function calling
     const genAI = new GoogleGenerativeAI(getCurrentApiKey());
-    const model = genAI.getGenerativeModel({ model: currentModel });
+    
+    // Define function for calendar access
+    const calendarFunction = {
+      name: "get_user_calendar",
+      description: "Get calendar events for today for a specific user using their email address.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          "userPrincipalName": {
+            type: "STRING",
+            description: "The user's email address (User Principal Name), for example 'john.doe@example.com'."
+          }
+        },
+        required: ["userPrincipalName"]
+      }
+    };
+
+    const model = genAI.getGenerativeModel({ 
+      model: currentModel,
+      tools: [{ functionDeclarations: [calendarFunction] }]
+    });
 
     // Get or create conversation history for this user
     if (!conversations.has(userId)) {
@@ -181,45 +236,44 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
 `;
 
-    // Add previous conversation history
-    if (history.length > 0) {
-      conversationContext += "Previous conversation in this channel:\n";
-      history.forEach((msg, index) => {
-        conversationContext += `${msg.role}: ${msg.content}\n`;
-      });
-      conversationContext += "\n";
-    }
+    // Start chat session with history and system prompt
+    const chat = model.startChat({ 
+      history,
+      systemInstruction: conversationContext
+    });
 
-    conversationContext += `Current message from team member: ${finalText}`;
-
-    // Check for "home" API command
-    if (finalText.toLowerCase().includes('home')) {
-      try {
-        const apiData = await fetch('https://api.zippopotam.us/us/33162');
-        const jsonData = await apiData.json();
-        conversationContext += `\n\nHome API Response from https://api.zippopotam.us/us/33162:\n${JSON.stringify(jsonData, null, 2)}`;
-      } catch (error) {
-        conversationContext += `\n\nNote: Could not fetch home API data - ${error.message}`;
-      }
-    }
-
-    // Check if user is asking about an API/URL and fetch it
-    const urlRegex = /https?:\/\/[^\s]+/g;
-    const urls = finalText.match(urlRegex);
-    if (urls && (finalText.toLowerCase().includes('research') || finalText.toLowerCase().includes('api') || finalText.toLowerCase().includes('check'))) {
-      try {
-        const apiData = await fetch(urls[0]);
-        const jsonData = await apiData.json();
-        conversationContext += `\n\nAPI Response from ${urls[0]}:\n${JSON.stringify(jsonData, null, 2)}`;
-      } catch (error) {
-        conversationContext += `\n\nNote: Could not fetch data from ${urls[0]} - ${error.message}`;
-      }
-    }
-
-    // Generate response
-    const result = await model.generateContent(conversationContext);
+    // Send message and handle function calls
+    const result = await chat.sendMessage(finalText);
     const response = result.response;
-    const text = response.text();
+    
+    // Check if Gemini wants to call the calendar function
+    const functionCalls = response.functionCalls();
+    let text = response.text();
+    
+    if (functionCalls && functionCalls.length > 0) {
+      for (const call of functionCalls) {
+        if (call.name === "get_user_calendar") {
+          const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
+          
+          if (!userEmail) {
+            text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
+            break;
+          }
+          
+          const calendarData = await getUserCalendar(userEmail);
+          
+          // Send function result back to chat
+          const functionResult = await chat.sendMessage([{
+            functionResponse: {
+              name: "get_user_calendar",
+              response: calendarData || { error: "Could not fetch calendar data" }
+            }
+          }]);
+          
+          text = functionResult.response.text();
+        }
+      }
+    }
 
     // Parse format choice
     const isCardFormat = text.startsWith('FORMAT:CARD');
@@ -233,8 +287,8 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
     // Save to conversation history (keep last 10 messages)
-    history.push({ role: "User", content: finalText });
-    history.push({ role: "Gent", content: cleanResponse });
+    history.push({ role: "user", parts: [{ text: finalText }] });
+    history.push({ role: "model", parts: [{ text: cleanResponse }] });
     if (history.length > 20) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
@@ -294,6 +348,10 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
   } catch (error) {
     console.error('Gemini API error:', error);
+
+    // Get current model for error message
+    const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
+    const shouldBroadcast = cleanText.toLowerCase().includes('(broadcast)');
 
     // If broadcast, send error to Teams webhook
     if (shouldBroadcast) {
