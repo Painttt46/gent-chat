@@ -415,7 +415,13 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
 
   } catch (error) {
-    console.error('Gemini API error:', error);
+    console.error('=== FULL ERROR DETAILS ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error cause:', error.cause);
+    console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    console.error('=== END ERROR DETAILS ===');
 
     // Get current model for error message
     const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
@@ -423,7 +429,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // If broadcast, send error to Teams webhook
     if (shouldBroadcast) {
-      const errorMessage = `🔊 **Gent Error:**\n\nSorry, I'm having trouble right now. Please try again.\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
+      const errorMessage = `🔊 **Gent Error:**\n\n${error.name}: ${error.message}\n\nStack: ${error.stack}\n\n💬 **${conversations.get(userId)?.length / 2 || 0} messages** | **${models[currentModel].name}** | **${models[currentModel].count}/${models[currentModel].limit} requests** | **API ${currentApiKeyIndex + 1}/2**`;
       await sendToTeamsWebhook(errorMessage);
       return res.status(200).json({
         text: "❌ Broadcast failed - error sent to channel"
@@ -431,7 +437,7 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
     
     res.status(200).json({
-      text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
+      text: `❌ **Gent Error:**\n\n**${error.name}**: ${error.message}\n\n**Stack**: ${error.stack}\n\n**Full Error**: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`
     });
   }
 }
