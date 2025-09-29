@@ -19,21 +19,33 @@ function getCurrentApiKey() {
 
 // Get Graph API access token
 async function getGraphToken() {
-  const clientConfig = {
-    auth: {
-      clientId: process.env.AZURE_CLIENT_ID,
-      clientSecret: process.env.AZURE_CLIENT_SECRET,
-      authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`
-    }
-  };
-  
-  const cca = new ConfidentialClientApplication(clientConfig);
-  const clientCredentialRequest = {
-    scopes: ['https://graph.microsoft.com/.default']
-  };
-  
-  const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
-  return response.accessToken;
+  try {
+    const clientConfig = {
+      auth: {
+        clientId: process.env.AZURE_CLIENT_ID,
+        clientSecret: process.env.AZURE_CLIENT_SECRET,
+        authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`
+      }
+    };
+    
+    console.log('Azure config:', {
+      clientId: process.env.AZURE_CLIENT_ID ? 'Set' : 'Missing',
+      clientSecret: process.env.AZURE_CLIENT_SECRET ? 'Set' : 'Missing',
+      tenantId: process.env.AZURE_TENANT_ID ? 'Set' : 'Missing'
+    });
+    
+    const cca = new ConfidentialClientApplication(clientConfig);
+    const clientCredentialRequest = {
+      scopes: ['https://graph.microsoft.com/.default']
+    };
+    
+    const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
+    console.log('Token acquired successfully');
+    return response.accessToken;
+  } catch (error) {
+    console.error('Token acquisition error:', error);
+    throw error;
+  }
 }
 
 // Get user calendar for today
@@ -43,14 +55,27 @@ async function getUserCalendar(userEmail) {
     const today = new Date().toISOString().split('T')[0];
     const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${today}T00:00:00Z&endDateTime=${today}T23:59:59Z&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
     
+    console.log('Fetching calendar for:', userEmail);
+    console.log('Graph API URL:', url);
+    
     const response = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     
-    return await response.json();
+    console.log('Graph API response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Graph API error response:', errorText);
+      return { error: `HTTP ${response.status}: ${errorText}` };
+    }
+    
+    const data = await response.json();
+    console.log('Calendar data received:', data);
+    return data;
   } catch (error) {
     console.error('Graph API error:', error);
-    return null;
+    return { error: error.message };
   }
 }
 async function sendToTeamsWebhook(message) {
