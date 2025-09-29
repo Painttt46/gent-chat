@@ -80,7 +80,10 @@ async function findUserByShortName(name) {
 // Microsoft Search API function
 async function searchCalendarEvents(queryString) {
     try {
+        console.log('Starting search for:', queryString);
         const token = await getGraphToken();
+        console.log('Token acquired for search');
+        
         const url = 'https://graph.microsoft.com/v1.0/search/query';
         
         const requestBody = {
@@ -104,7 +107,7 @@ async function searchCalendarEvents(queryString) {
             ]
         };
 
-        console.log('Searching calendar events with query:', queryString);
+        console.log('Search request body:', JSON.stringify(requestBody, null, 2));
         
         const response = await fetch(url, {
             method: 'POST',
@@ -115,17 +118,20 @@ async function searchCalendarEvents(queryString) {
             body: JSON.stringify(requestBody)
         });
         
+        console.log('Search response status:', response.status);
+        
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Search API error response:', errorText);
-            return { error: `ไม่สามารถค้นหาได้ครับ: ${errorText}` };
+            return { error: `Search failed: HTTP ${response.status} - ${errorText}` };
         }
         
         const data = await response.json();
+        console.log('Search response data:', JSON.stringify(data, null, 2));
         return data;
     } catch (error) {
         console.error('Search API error:', error);
-        return { error: error.message };
+        return { error: `Search error: ${error.message}` };
     }
 }
 async function getUserCalendar(nameOrEmail) {
