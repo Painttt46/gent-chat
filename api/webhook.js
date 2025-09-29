@@ -81,24 +81,23 @@ async function findUserByShortName(name) {
 async function getUserCalendar(nameOrEmail) {
     let userEmail = nameOrEmail;
 
-    // ตรวจสอบว่าค่าที่รับมาเป็นอีเมลหรือไม่
+    // ถ้าเป็นอีเมลแล้ว ให้ใช้เลย ถ้าไม่ใช่ ให้ค้นหาจากชื่อ
     if (!nameOrEmail.includes('@')) {
-        console.log(`Input '${nameOrEmail}' is not an email. Searching for user...`);
+        console.log(`Searching for user: '${nameOrEmail}'`);
         const users = await findUserByShortName(nameOrEmail);
 
         if (!users || users.length === 0) {
             return { error: `ไม่พบผู้ใช้ที่ชื่อ '${nameOrEmail}' ในระบบครับ` };
         }
         if (users.length > 1) {
-            return { error: `พบผู้ใช้ที่ชื่อ '${nameOrEmail}' มากกว่า 1 คน กรุณาระบุให้ชัดเจนขึ้นครับ` };
+            const userList = users.map(u => u.displayName).join(', ');
+            return { error: `พบผู้ใช้ที่ชื่อ '${nameOrEmail}' มากกว่า 1 คน: ${userList} กรุณาระบุให้ชัดเจนขึ้นครับ` };
         }
         
-        // ถ้าเจอคนเดียว ให้ใช้ userPrincipalName (อีเมล) ของคนนั้น
         userEmail = users[0].userPrincipalName;
         console.log(`User found: ${users[0].displayName} (${userEmail})`);
     }
 
-    // --- ส่วนที่เหลือของฟังก์ชันทำงานเหมือนเดิม ---
     try {
         const token = await getGraphToken();
         const today = new Date();
@@ -107,22 +106,18 @@ async function getUserCalendar(nameOrEmail) {
         const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,organizer,start,end,location`;
         
         console.log('Fetching calendar for:', userEmail);
-        console.log('Graph API URL:', url);
         
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
-        console.log('Graph API response status:', response.status);
-        
         if (!response.ok) {
             const errorText = await response.text();
             console.error('Graph API error response:', errorText);
-            return { error: `HTTP ${response.status}: ${errorText}` };
+            return { error: `ไม่สามารถดึงข้อมูลปฏิทินของ ${userEmail} ได้ครับ` };
         }
         
         const data = await response.json();
-        console.log('Calendar data received:', data);
         return data;
     } catch (error) {
         console.error('Graph API error:', error);
