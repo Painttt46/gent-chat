@@ -1,4 +1,3 @@
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 // Simple in-memory conversation storage (per user)
@@ -318,51 +317,28 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     let text;
 
     const functionCalls = response.functionCalls();
-    let text;
 
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        console.log("Function call details:", JSON.stringify(call, null, 2));
         
-        let functionResponseResult;
-
         if (call.name === "get_user_calendar") {
-            const nameOrEmail = call.args?.userPrincipalName;
-            console.log("Calendar request for:", nameOrEmail);
+            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
             
-            if (!nameOrEmail) {
-                functionResponseResult = { error: "User name or email not provided." };
+            if (!userEmail) {
+                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
             } else {
-                const calendarData = await getUserCalendar(nameOrEmail);
-                console.log("Calendar data received:", calendarData);
-                functionResponseResult = calendarData.value || calendarData;
+                const calendarData = await getUserCalendar(userEmail);
+                
+                // Create a new chat with function result
+                const newChat = model.startChat({ history });
+                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
+                const finalResult = await newChat.sendMessage(contextMessage);
+                text = finalResult.response.text();
             }
         } else {
-            functionResponseResult = { error: "Unknown function called." };
+            text = "Unknown function called.";
         }
-
-        console.log("Sending function response:", JSON.stringify(functionResponseResult, null, 2));
-
-        try {
-            // ส่งผลลัพธ์ของฟังก์ชันกลับเข้าไปใน "chat session เดิม"
-            const result = await chat.sendMessage([
-                {
-                    functionResponse: {
-                        name: call.name,
-                        response: {
-                            result: functionResponseResult
-                        }
-                    }
-                }
-            ]);
-            
-            text = result.response.text();
-        } catch (functionError) {
-            console.error("Function response error:", functionError);
-            text = "ขออภัยครับ มีปัญหาในการประมวลผลข้อมูลปฏิทิน กรุณาลองใหม่อีกครั้งครับ";
-        }
-
     } else {
         text = response.text();
     }
