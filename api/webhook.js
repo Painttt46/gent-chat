@@ -343,12 +343,12 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
             const result = await chat.sendMessage([
                 {
-                    functionResponse: {
-                        name: call.name,
-                        response: {
-                            result: JSON.stringify(functionResponseResult)
+                    parts: [{
+                        functionResponse: {
+                            name: call.name,
+                            response: functionResponseResult
                         }
-                    }
+                    }]
                 }
             ]);
             
