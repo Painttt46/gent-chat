@@ -367,6 +367,11 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       cleanResponse = text.replace('FORMAT:TEXT', '').trim();
     }
 
+    // Fallback for empty responses
+    if (!cleanResponse || cleanResponse.length === 0) {
+      cleanResponse = "I'm sorry, I couldn't generate a proper response. Please try rephrasing your question.";
+    }
+
     // Save to conversation history (keep last 10 messages)
     history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
