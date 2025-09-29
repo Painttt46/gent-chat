@@ -322,37 +322,23 @@ Choose FORMAT:CARD when the response would look better with structured formattin
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
         
-        let functionResponse;
-
         if (call.name === "get_user_calendar") {
             const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
             
             if (!userEmail) {
-                functionResponse = { error: "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?" };
+                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
             } else {
                 const calendarData = await getUserCalendar(userEmail);
-                functionResponse = { result: calendarData.value || calendarData.error || "No data found." };
+                
+                // Create a new chat with function result
+                const newChat = model.startChat({ history });
+                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
+                const finalResult = await newChat.sendMessage(contextMessage);
+                text = finalResult.response.text();
             }
         } else {
-            functionResponse = { error: "Unknown function called." };
+            text = "Unknown function called.";
         }
-
-        // 1. ดึงประวัติการสนทนาทั้งหมดหลังจากที่ Gemini ตอบกลับมาครั้งแรก
-        const fullHistory = await chat.getHistory();
-
-        // 2. เรียกใช้ model.generateContent() โดยส่งประวัติทั้งหมด + ผลลัพธ์ของฟังก์ชันกลับไป
-        const finalResult = await model.generateContent([
-            ...fullHistory,
-            {
-                functionResponse: {
-                    name: call.name,
-                    response: functionResponse,
-                }
-            }
-        ]);
-
-        text = finalResult.response.text();
-
     } else {
         text = response.text();
     }
