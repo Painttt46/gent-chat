@@ -318,47 +318,39 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     const functionCalls = response.functionCalls();
 
+    const functionCalls = response.functionCalls();
+    let text;
+
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        let functionResponseResult;
+        let functionResultPayload; // เปลี่ยนชื่อตัวแปรเพื่อความชัดเจน
 
-        try {
-            if (call.name === "get_user_calendar") {
-                const nameOrEmail = call.args?.userPrincipalName;
-                console.log("Calendar request for:", nameOrEmail);
-                
-                if (!nameOrEmail) {
-                    functionResponseResult = { error: "User name or email not provided." };
-                } else {
-                    const calendarData = await getUserCalendar(nameOrEmail);
-                    console.log("Calendar data received:", calendarData);
-                    functionResponseResult = calendarData.value || calendarData;
-                }
+        if (call.name === "get_user_calendar") {
+            const nameOrEmail = call.args?.userPrincipalName;
+            
+            if (!nameOrEmail) {
+                functionResultPayload = { error: "User name or email not provided." };
             } else {
-                functionResponseResult = { error: "Unknown function called." };
+                const calendarData = await getUserCalendar(nameOrEmail);
+                functionResultPayload = calendarData.value || calendarData;
             }
 
-            console.log("Sending function response:", JSON.stringify(functionResponseResult, null, 2));
+        } else {
+            functionResultPayload = { error: "Unknown function called." };
+        }
 
-            const result = await chat.sendMessage([{
+        // *** นี่คือส่วนที่แก้ไขแล้ว: ส่งผลลัพธ์เข้าไปใน response โดยตรง ***
+        const result = await chat.sendMessage([
+            {
                 functionResponse: {
                     name: call.name,
-                    response: functionResponseResult
+                    response: functionResultPayload // ไม่มี { result: ... } แล้ว
                 }
-            }]);
-            
-            text = result.response.text();
-
-        } catch (functionError) {
-            console.error("=== FUNCTION ERROR ===");
-            console.error("Error:", functionError);
-            console.error("Error message:", functionError.message);
-            console.error("Error stack:", functionError.stack);
-            console.error("=== END FUNCTION ERROR ===");
-            
-            text = `❌ Function Error: ${functionError.message}`;
-        }
+            }
+        ]);
+        
+        text = result.response.text();
 
     } else {
         text = response.text();
