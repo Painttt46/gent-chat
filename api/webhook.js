@@ -317,28 +317,44 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     let text;
 
     const functionCalls = response.functionCalls();
+    let text;
 
     if (functionCalls && functionCalls.length > 0) {
         console.log("Gemini wants to call a function...");
         const call = functionCalls[0];
-        
+        let functionResponseResult;
+
         if (call.name === "get_user_calendar") {
-            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
+            const nameOrEmail = call.args?.userPrincipalName;
             
-            if (!userEmail) {
-                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
+            if (!nameOrEmail) {
+                functionResponseResult = { error: "User name or email not provided." };
             } else {
-                const calendarData = await getUserCalendar(userEmail);
-                
-                // Create a new chat with function result
-                const newChat = model.startChat({ history });
-                const contextMessage = `User asked about calendar for: ${userEmail}\n\nCalendar data: ${JSON.stringify(calendarData, null, 2)}`;
-                const finalResult = await newChat.sendMessage(contextMessage);
-                text = finalResult.response.text();
+                const calendarData = await getUserCalendar(nameOrEmail);
+                functionResponseResult = calendarData.value || calendarData;
             }
         } else {
-            text = "Unknown function called.";
+            functionResponseResult = { error: "Unknown function called." };
         }
+
+        try {
+            const result = await chat.sendMessage([
+                {
+                    functionResponse: {
+                        name: call.name,
+                        response: {
+                            result: functionResponseResult
+                        }
+                    }
+                }
+            ]);
+            
+            text = result.response.text();
+        } catch (functionError) {
+            console.error("Function response error:", functionError);
+            text = "ขออภัยครับ มีปัญหาในการประมวลผลข้อมูลปฏิทิน กรุณาลองใหม่อีกครั้งครับ";
+        }
+
     } else {
         text = response.text();
     }
