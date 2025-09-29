@@ -48,35 +48,86 @@ async function getGraphToken() {
   }
 }
 
-// Get user calendar for today
-async function getUserCalendar(userEmail) {
-  try {
-    const token = await getGraphToken();
-    const today = new Date().toISOString().split('T')[0];
-    const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${today}T00:00:00Z&endDateTime=${today}T23:59:59Z&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
-    
-    console.log('Fetching calendar for:', userEmail);
-    console.log('Graph API URL:', url);
-    
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    console.log('Graph API response status:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Graph API error response:', errorText);
-      return { error: `HTTP ${response.status}: ${errorText}` };
+// ฟังก์ชันใหม่สำหรับ "ค้นหา" ผู้ใช้จากชื่อ
+async function findUserByShortName(name) {
+    try {
+        const token = await getGraphToken();
+        // สร้าง query เพื่อค้นหาจาก ชื่อที่แสดง, ชื่อจริง, หรือชื่อเล่นในอีเมล
+        const filterQuery = `$filter=startswith(displayName,'${name}') or startswith(givenName,'${name}') or startswith(mailNickname,'${name}')`;
+        const selectQuery = `&$select=displayName,userPrincipalName`;
+        const url = `https://graph.microsoft.com/v1.0/users?${filterQuery}${selectQuery}`;
+
+        console.log('Searching for user with URL:', url);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Graph API user search error:', errorText);
+            return { error: `HTTP ${response.status}: ${errorText}` };
+        }
+        
+        const data = await response.json();
+        return data.value; // คืนค่าเป็น array ของ users ที่เจอ
+    } catch (error) {
+        console.error('findUserByShortName error:', error);
+        return { error: error.message };
     }
-    
-    const data = await response.json();
-    console.log('Calendar data received:', data);
-    return data;
-  } catch (error) {
-    console.error('Graph API error:', error);
-    return { error: error.message };
-  }
+}
+
+// ปรับแก้ฟังก์ชัน getUserCalendar เดิม
+async function getUserCalendar(nameOrEmail) {
+    let userEmail = nameOrEmail;
+
+    // ตรวจสอบว่าค่าที่รับมาเป็นอีเมลหรือไม่
+    if (!nameOrEmail.includes('@')) {
+        console.log(`Input '${nameOrEmail}' is not an email. Searching for user...`);
+        const users = await findUserByShortName(nameOrEmail);
+
+        if (!users || users.length === 0) {
+            return { error: `ไม่พบผู้ใช้ที่ชื่อ '${nameOrEmail}' ในระบบครับ` };
+        }
+        if (users.length > 1) {
+            return { error: `พบผู้ใช้ที่ชื่อ '${nameOrEmail}' มากกว่า 1 คน กรุณาระบุให้ชัดเจนขึ้นครับ` };
+        }
+        
+        // ถ้าเจอคนเดียว ให้ใช้ userPrincipalName (อีเมล) ของคนนั้น
+        userEmail = users[0].userPrincipalName;
+        console.log(`User found: ${users[0].displayName} (${userEmail})`);
+    }
+
+    // --- ส่วนที่เหลือของฟังก์ชันทำงานเหมือนเดิม ---
+    try {
+        const token = await getGraphToken();
+        const today = new Date();
+        const startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+        const endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+        const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,organizer,start,end,location`;
+        
+        console.log('Fetching calendar for:', userEmail);
+        console.log('Graph API URL:', url);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        console.log('Graph API response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Graph API error response:', errorText);
+            return { error: `HTTP ${response.status}: ${errorText}` };
+        }
+        
+        const data = await response.json();
+        console.log('Calendar data received:', data);
+        return data;
+    } catch (error) {
+        console.error('Graph API error:', error);
+        return { error: error.message };
+    }
 }
 async function sendToTeamsWebhook(message) {
   const webhookUrl = 'https://gentsolutions.webhook.office.com/webhookb2/330ce018-1d89-4bde-8a00-7e112b710934@c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906/IncomingWebhook/d5ec6936083f44f7aaf575f90b1f69da/0b176f81-19e0-4b39-8fc8-378244861f9b/V2FcW5LeJmT5RLRTWJR9gSZLh55QhBpny4Nll4VGmIk4I1';
