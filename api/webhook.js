@@ -313,35 +313,48 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
     // Send message and handle function calls
     const result = await chat.sendMessage(finalText);
-    const response = result.response;
-    
-    // Check if Gemini wants to call the calendar function
+    let response = result.response;
+    let text;
+
     const functionCalls = response.functionCalls();
-    let text = response.text();
-    
+
     if (functionCalls && functionCalls.length > 0) {
-      for (const call of functionCalls) {
+        console.log("Gemini wants to call a function...");
+        const call = functionCalls[0];
+        
+        let functionResponse;
+
         if (call.name === "get_user_calendar") {
-          const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
-          
-          if (!userEmail) {
-            text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
-            break;
-          }
-          
-          const calendarData = await getUserCalendar(userEmail);
-          
-          // Send function result back to chat
-          const functionResult = await chat.sendMessage([{
-            functionResponse: {
-              name: "get_user_calendar",
-              response: calendarData || { error: "Could not fetch calendar data" }
+            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
+            
+            if (!userEmail) {
+                functionResponse = { error: "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?" };
+            } else {
+                const calendarData = await getUserCalendar(userEmail);
+                functionResponse = { result: calendarData.value || calendarData.error || "No data found." };
             }
-          }]);
-          
-          text = functionResult.response.text();
+        } else {
+            functionResponse = { error: "Unknown function called." };
         }
-      }
+
+        // 1. ดึงประวัติการสนทนาทั้งหมดหลังจากที่ Gemini ตอบกลับมาครั้งแรก
+        const fullHistory = await chat.getHistory();
+
+        // 2. เรียกใช้ model.generateContent() โดยส่งประวัติทั้งหมด + ผลลัพธ์ของฟังก์ชันกลับไป
+        const finalResult = await model.generateContent([
+            ...fullHistory,
+            {
+                functionResponse: {
+                    name: call.name,
+                    response: functionResponse,
+                }
+            }
+        ]);
+
+        text = finalResult.response.text();
+
+    } else {
+        text = response.text();
     }
 
     // Parse format choice
