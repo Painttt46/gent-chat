@@ -176,6 +176,11 @@ function getTotalRequests() {
 }
 
 export default async function handler(req, res) {
+  // Only handle POST requests
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   console.log('Method:', req.method);
   console.log('Body:', req.body);
 
@@ -237,10 +242,8 @@ export default async function handler(req, res) {
   }
 
   if (!cleanText) {
-    const currentModel = userModels.get(userId) || 'gemini-2.5-flash';
-    return res.status(200).json({
-      text: `Hi! I'm Gent, your AI work assistant in this Teams channel. How can I help you today?\n\nCommands:\n• 'clear' - reset conversation\n• 'model <name>' - switch AI model\n\nCurrent: ${models[currentModel].name} (${models[currentModel].count}/${models[currentModel].limit} requests) | API Key: ${currentApiKeyIndex + 1}/2`
-    });
+    // Don't respond to empty messages to avoid Teams errors
+    return res.status(200).json({});
   }
 
   try {
