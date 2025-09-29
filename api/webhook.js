@@ -270,7 +270,6 @@ export default async function handler(req, res) {
       }
     };
 
-    // กำหนดเป็น Object ที่มีโครงสร้าง { parts: [...] }
     const systemInstruction = {
       parts: [{ text: `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
 
@@ -308,42 +307,50 @@ Choose FORMAT:CARD when the response would look better with structured formattin
     }
     const history = conversations.get(userId);
 
-    // Start chat session with history
-    const chat = model.startChat({ history });
+    // Build conversation history with current message
+    const conversationHistory = [
+      ...history,
+      { role: "user", parts: [{ text: finalText }] }
+    ];
 
-    // Send message and handle function calls
-    const result = await chat.sendMessage(finalText);
-    let response = result.response;
+    // Generate content with history
+    let result = await model.generateContent({
+      contents: conversationHistory
+    });
+
     let text;
-
-    const functionCalls = response.functionCalls();
+    const functionCalls = result.response.functionCalls();
 
     if (functionCalls && functionCalls.length > 0) {
-        console.log("Gemini wants to call a function...");
-        const call = functionCalls[0];
+      console.log("Gemini wants to call a function...");
+      const call = functionCalls[0];
+      
+      if (call.name === "get_user_calendar") {
+        const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
         
-        if (call.name === "get_user_calendar") {
-            const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
-            
-            if (!userEmail) {
-                text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
-            } else {
-                const calendarData = await getUserCalendar(userEmail);
-                
-                // Send function response back to the same chat
-                const finalResult = await chat.sendMessage([{
-                    functionResponse: {
-                        name: "get_user_calendar",
-                        response: calendarData
-                    }
-                }]);
-                text = finalResult.response.text();
-            }
+        if (!userEmail) {
+          text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
         } else {
-            text = "Unknown function called.";
+          const calendarData = await getUserCalendar(userEmail);
+          
+          // Build history with function call and response
+          const historyWithFunction = [
+            ...conversationHistory,
+            { role: "model", parts: [{ functionCall: call }] },
+            { role: "function", parts: [{ functionResponse: { name: "get_user_calendar", response: calendarData } }] }
+          ];
+          
+          // Generate final response
+          const finalResult = await model.generateContent({
+            contents: historyWithFunction
+          });
+          text = finalResult.response.text();
         }
+      } else {
+        text = "Unknown function called.";
+      }
     } else {
-        text = response.text();
+      text = result.response.text();
     }
 
     // Parse format choice
