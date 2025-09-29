@@ -345,7 +345,9 @@ Choose FORMAT:CARD when the response would look better with structured formattin
                 {
                     functionResponse: {
                         name: call.name,
-                        response: functionResponseResult
+                        response: {
+                            result: JSON.stringify(functionResponseResult)
+                        }
                     }
                 }
             ]);
