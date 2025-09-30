@@ -619,17 +619,44 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
           // เรียกใช้ฟังก์ชัน createCalendarEvent เวอร์ชันใหม่ที่รับ parameter แค่ตัวเดียว
           const createResult = await createCalendarEvent(eventData);
 
-          // ส่วนที่เหลือสำหรับส่งข้อมูลกลับไปให้ Gemini สรุปผล
-          const historyWithFunction = [
-            ...conversationHistory,
-            { role: "model", parts: [{ functionCall: call }] },
-            { role: "function", parts: [{ functionResponse: { name: "create_calendar_event", response: createResult } }] }
-          ];
+          // ตรวจสอบผลลัพธ์จากการสร้าง Event ก่อน
+          if (createResult.error) {
+            // ถ้าการสร้าง Event ล้มเหลว ก็แจ้ง Error ไปตามจริง
+            text = `เกิดข้อผิดพลาดในการสร้างนัดหมายครับ: ${createResult.error}`;
+          } else {
+            // ถ้าการสร้าง Event สำเร็จ ให้เตรียมข้อความยืนยันพื้นฐานไว้ก่อน
+            let successMessage = `เรียบร้อยครับ! ผมได้สร้างนัดหมาย '${eventData.subject}' และส่งคำเชิญให้แล้วครับ ✅`;
 
-          const finalResult = await model.generateContent({
-            contents: historyWithFunction
-          });
-          text = finalResult.response?.text() ?? "เรียบร้อยครับ! ผมได้สร้างนัดหมายและส่งคำเชิญให้แล้วครับ";
+            // ตอนนี้ เราจะ "พยายาม" เรียก Gemini เพื่อสรุปผลให้สวยงาม
+            try {
+              const historyWithFunction = [
+                ...conversationHistory,
+                { role: "model", parts: [{ functionCall: call }] },
+                { role: "function", parts: [{ functionResponse: { name: "create_calendar_event", response: createResult } }] }
+              ];
+
+              const finalResult = await model.generateContent({
+                contents: historyWithFunction
+              });
+
+              const geminiText = finalResult.response?.text();
+
+              // ถ้า Gemini ตอบกลับมาเป็นข้อความที่มีเนื้อหา ก็ใช้ข้อความนั้น
+              if (geminiText) {
+                text = geminiText;
+              } else {
+                // ถ้า Gemini ตอบกลับมาว่างเปล่า ก็ใช้ข้อความที่เราเตรียมไว้
+                text = successMessage;
+              }
+
+            } catch (summarizationError) {
+              // ถ้าการเรียก Gemini ครั้งที่สองนี้ "พัง" หรือ "แครช"
+              console.error("Gemini summarization failed, using fallback message.", summarizationError);
+              // ไม่ต้องสนใจ Error! ให้ใช้ข้อความยืนยันที่เราเตรียมไว้แทน เพื่อให้ผู้ใช้รู้ว่างานสำเร็จแล้ว
+              text = successMessage;
+            }
+          }
+
         }
       } else {
         text = "Unknown function called.";
