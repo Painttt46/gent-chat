@@ -475,6 +475,7 @@ export default async function handler(req, res) {
       }
     };
     // ✅✅✅  นำ systemInstruction นี้ไปวางทับของเดิมในไฟล์ของคุณ ✅✅✅
+    // ✅✅✅ นี่คือเวอร์ชันสมบูรณ์แบบ 100% ให้นำไปวางทับของเดิมได้เลย ✅✅✅
     const systemInstruction = {
       parts: [{
         text: `You are Gent (เจนต์), a proactive and friendly AI work assistant integrated into a Microsoft Teams channel. Your primary goal is to help team members be more productive and collaborative.
@@ -499,9 +500,9 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
 
 2.  **Creating Events (\`Calendar\`):**
     * **CRITICAL RULE:** For ANY request to book, schedule, create, or set up an event, meeting, or calendar block (e.g., "นัดประชุมให้หน่อย", "จองเวลาพรุ่งนี้"), you **MUST** call the \`Calendar\` function.
-    * **Handling "Myself":** If the user says the meeting is for 'myself', 'me' (ตัวเอง, ฉัน), or doesn't specify any attendees, **DO NOT ask for their name**. Instead, call the tool with an **empty \`attendees\` array** (\`[]\`). The system is designed to automatically use the current user's name in this case.
+    * **Handling "Myself":** If the user says the meeting is for 'myself', 'me' (ตัวเอง, ฉัน), or doesn't specify any attendees, **DO NOT ask for their name**. Instead, call the tool with an **empty \`attendees\` array** (\`[]\`). The system is designed to automatically use the current user's name in this case.
     * **Confirmation is Key:** Before calling the function, **summarize the details** (Subject, Time, Attendees, Meeting Link status) and **ask the user for confirmation**. For example: "โอเคครับ, ผมจะสร้างนัดหมาย 'คุยโปรเจค' พรุ่งนี้ 10:00-11:00 น. มีคุณวีรปรัชญ์เข้าร่วม พร้อมลิงก์ประชุม Teams นะครับ ยืนยันไหมครับ?"
-    * **Handle Ambiguity:** If details are missing (like end time or attendees), **ask clarifying questions**. Don't assume. Example: "ได้เลยครับ ประชุมเริ่ม 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ?"
+    * **Handle Ambiguity:** If other details are missing (like end time), **ask clarifying questions**. Don't assume. Example: "ได้เลยครับ ประชุมเริ่ม 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ?"
     * **Meeting Link Inference:** Use the \`createMeeting\` parameter based on the user's language. Keywords like "ประชุม", "คอล", "meeting", "หารือ" imply \`createMeeting: true\`. Keywords like "จองเวลา", "บล็อกคิว", "ทำงานส่วนตัว" imply \`createMeeting: false\`. If unsure, default to \`true\` and mention it in the confirmation.
 
 ---
@@ -589,15 +590,26 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
       } else if (call.name === "create_calendar_event") {
         // รับค่าทั้งหมดจาก call.args ที่ Gemini ส่งมา (ซึ่งตอนนี้จะมี attendees ด้วย)
         const eventData = call.args;
-        if (!eventData.attendees || eventData.attendees.length === 0) {
-          // ให้ใช้ชื่อของผู้ใช้ที่ส่งข้อความมาเป็น attendee คนแรก (และเป็น organizer)
-          const userName = req.body?.from?.name;
-          if (userName) {
-            // แยกชื่อจริงออกจากนามสกุล (ถ้ามี) แล้วใช้แค่ชื่อแรก
-            const firstName = userName.split(' ')[0];
-            eventData.attendees = [firstName];
-            console.log(`No attendees specified, defaulting to current user: ${firstName}`);
+        const userFirstName = req.body?.from?.name?.split(' ')[0];
+
+        if (userFirstName) {
+          // ใช้ Set เพื่อจัดการรายชื่อที่ไม่ซ้ำกัน และทำให้มั่นใจว่าผู้ใช้ปัจจุบันอยู่ในลิสต์เสมอ
+          const finalAttendees = new Set([userFirstName]);
+
+          if (eventData.attendees && eventData.attendees.length > 0) {
+            eventData.attendees.forEach(name => {
+              // ทำความสะอาดข้อมูล: ถ้าเจอคำว่า 'ตัวเอง' ให้ข้ามไป (เพราะเราใส่ชื่อจริงไปแล้ว)
+              // ถ้าเป็นชื่ออื่น ให้เพิ่มเข้าไปใน Set
+              const cleanName = name.trim().toLowerCase();
+              if (cleanName !== 'ตัวเอง' && cleanName !== 'myself' && cleanName !== 'me') {
+                finalAttendees.add(name);
+              }
+            });
           }
+
+          // แปลง Set กลับไปเป็น Array เพื่อส่งไปใช้งานต่อ
+          eventData.attendees = Array.from(finalAttendees);
+          console.log(`Final processed attendees:`, eventData.attendees);
         }
 
         // ตรวจสอบข้อมูลสำคัญ รวมถึงเช็คว่ามี attendees อย่างน้อย 1 คนหรือไม่
