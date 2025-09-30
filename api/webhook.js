@@ -132,7 +132,6 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     }
     
     console.log('Final date range:', { startDateTime, endDateTime });
-    }
 
     const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
 
