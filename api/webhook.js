@@ -100,7 +100,7 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
 
   try {
     const token = await getGraphToken();
-    
+
     // Set date range - default to today if not specified
     let startDateTime, endDateTime;
     if (startDate && endDate) {
@@ -121,13 +121,13 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
       const bangkokOffset = 7 * 60; // Bangkok is UTC+7
       const bangkokTime = new Date(now.getTime() + (bangkokOffset * 60 * 1000));
       const todayStr = bangkokTime.toISOString().split('T')[0];
-      
+
       const start = new Date(todayStr + 'T00:00:00+07:00');
       const end = new Date(todayStr + 'T23:59:59+07:00');
       startDateTime = start.toISOString();
       endDateTime = end.toISOString();
     }
-    
+
     const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
 
     console.log('Fetching calendar for:', userEmail, 'from', startDateTime, 'to', endDateTime);
@@ -289,7 +289,16 @@ export default async function handler(req, res) {
     // Define function for calendar access
     const calendarFunction = {
       name: "get_user_calendar",
-      description: "Get calendar events for a specific user within a date range. You can use either their name (like 'weraprat', 'natsarin') or full email address. If no dates are specified, it defaults to today only.",
+      description: `Get calendar events for a user within a specified date range. 
+      The model is responsible for interpreting natural language date expressions and converting them into a precise YYYY-MM-DD format for startDate and endDate.
+      - If no dates are provided, it defaults to today.
+      - Understands relative terms based on the current date. For example:
+        - "yesterday", "tomorrow"
+        - "this week", "next week", "last week" (Assume week starts on Monday)
+        - "this month", "next month", "last month"
+      - The model MUST calculate the exact start and end dates before calling the tool. For example, if the user asks for "next week", the model should calculate the dates for the upcoming Monday and Sunday and pass them as startDate and endDate.`,
+
+      // ✅ แก้ไข: เพิ่ม "parameters" object ครอบส่วนนี้
       parameters: {
         type: "OBJECT",
         properties: {
@@ -302,7 +311,7 @@ export default async function handler(req, res) {
             description: "Start date in YYYY-MM-DD format (optional). If not provided, defaults to today."
           },
           "endDate": {
-            type: "STRING", 
+            type: "STRING",
             description: "End date in YYYY-MM-DD format (optional). If not provided but startDate is given, defaults to same day as startDate."
           }
         },
