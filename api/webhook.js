@@ -104,16 +104,28 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     // Set date range - default to today if not specified
     let startDateTime, endDateTime;
     if (startDate && endDate) {
-      startDateTime = new Date(startDate).toISOString();
-      endDateTime = new Date(endDate).toISOString();
+      // Parse dates and set to Bangkok timezone
+      const start = new Date(startDate + 'T00:00:00+07:00');
+      const end = new Date(endDate + 'T23:59:59+07:00');
+      startDateTime = start.toISOString();
+      endDateTime = end.toISOString();
     } else if (startDate) {
-      const start = new Date(startDate);
-      startDateTime = new Date(start.setHours(0, 0, 0, 0)).toISOString();
-      endDateTime = new Date(start.setHours(23, 59, 59, 999)).toISOString();
+      // Single date - full day in Bangkok timezone
+      const start = new Date(startDate + 'T00:00:00+07:00');
+      const end = new Date(startDate + 'T23:59:59+07:00');
+      startDateTime = start.toISOString();
+      endDateTime = end.toISOString();
     } else {
-      const today = new Date();
-      startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-      endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+      // Default to today in Bangkok timezone
+      const now = new Date();
+      const bangkokOffset = 7 * 60; // Bangkok is UTC+7
+      const bangkokTime = new Date(now.getTime() + (bangkokOffset * 60 * 1000));
+      const todayStr = bangkokTime.toISOString().split('T')[0];
+      
+      const start = new Date(todayStr + 'T00:00:00+07:00');
+      const end = new Date(todayStr + 'T23:59:59+07:00');
+      startDateTime = start.toISOString();
+      endDateTime = end.toISOString();
     }
     
     const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
