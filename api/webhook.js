@@ -585,7 +585,7 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
           const finalResult = await model.generateContent({
             contents: historyWithFunction
           });
-          text = finalResult.response?.text() ?? "เรียบร้อยครับ! ผมได้สร้างนัดหมายและส่งคำเชิญให้แล้วครับ";
+          text = finalResult.response.text();
         }
       } else if (call.name === "create_calendar_event") {
         // รับค่าทั้งหมดจาก call.args ที่ Gemini ส่งมา (ซึ่งตอนนี้จะมี attendees ด้วย)
@@ -629,7 +629,7 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
           const finalResult = await model.generateContent({
             contents: historyWithFunction
           });
-          text = finalResult.response?.text() ?? "";
+          text = finalResult.response?.text() ?? "เรียบร้อยครับ! ผมได้สร้างนัดหมายและส่งคำเชิญให้แล้วครับ";
         }
       } else {
         text = "Unknown function called.";
