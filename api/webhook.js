@@ -616,7 +616,7 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
           const finalResult = await model.generateContent({
             contents: historyWithFunction
           });
-          text = finalResult.response.text();
+          text = finalResult.response?.text() ?? "";
         }
       } else {
         text = "Unknown function called.";
