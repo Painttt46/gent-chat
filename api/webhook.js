@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfidentialClientApplication } from '@azure/msal-node';
-import { zonedTimeToUtc, utcToZonedTime, format } from 'date-fns-tz';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { parseISO, startOfDay, endOfDay } from 'date-fns';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
@@ -111,22 +111,22 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     
     if (startDate && endDate) {
       // Parse dates and convert to Bangkok timezone, then to UTC
-      const start = zonedTimeToUtc(startOfDay(parseISO(startDate)), bangkokTz);
-      const end = zonedTimeToUtc(endOfDay(parseISO(endDate)), bangkokTz);
+      const start = fromZonedTime(startOfDay(parseISO(startDate)), bangkokTz);
+      const end = fromZonedTime(endOfDay(parseISO(endDate)), bangkokTz);
       startDateTime = start.toISOString();
       endDateTime = end.toISOString();
     } else if (startDate) {
       // Single date - full day in Bangkok timezone
-      const start = zonedTimeToUtc(startOfDay(parseISO(startDate)), bangkokTz);
-      const end = zonedTimeToUtc(endOfDay(parseISO(startDate)), bangkokTz);
+      const start = fromZonedTime(startOfDay(parseISO(startDate)), bangkokTz);
+      const end = fromZonedTime(endOfDay(parseISO(startDate)), bangkokTz);
       startDateTime = start.toISOString();
       endDateTime = end.toISOString();
     } else {
       // Default to today in Bangkok timezone
       const now = new Date();
-      const bangkokNow = utcToZonedTime(now, bangkokTz);
-      const start = zonedTimeToUtc(startOfDay(bangkokNow), bangkokTz);
-      const end = zonedTimeToUtc(endOfDay(bangkokNow), bangkokTz);
+      const bangkokNow = toZonedTime(now, bangkokTz);
+      const start = fromZonedTime(startOfDay(bangkokNow), bangkokTz);
+      const end = fromZonedTime(endOfDay(bangkokNow), bangkokTz);
       startDateTime = start.toISOString();
       endDateTime = end.toISOString();
     }
