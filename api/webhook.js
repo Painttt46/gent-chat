@@ -335,6 +335,12 @@ Your role:
 - Help with work-related questions, productivity tips, and general office support
 - You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
 
+IMPORTANT DATE CONTEXT: 
+- Current date: ${new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'})} (YYYY-MM-DD format)
+- Current year: 2025
+- When users mention dates without specifying year, assume they mean 2025
+- Always use 2025 as the default year unless explicitly stated otherwise
+
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
 - For any of these, use "FORMAT:CARD" followed by your response:
