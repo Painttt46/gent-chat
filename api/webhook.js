@@ -588,6 +588,16 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
       } else if (call.name === "create_calendar_event") {
         // รับค่าทั้งหมดจาก call.args ที่ Gemini ส่งมา (ซึ่งตอนนี้จะมี attendees ด้วย)
         const eventData = call.args;
+        if (!eventData.attendees || eventData.attendees.length === 0) {
+          // ให้ใช้ชื่อของผู้ใช้ที่ส่งข้อความมาเป็น attendee คนแรก (และเป็น organizer)
+          const userName = req.body?.from?.name;
+          if (userName) {
+            // แยกชื่อจริงออกจากนามสกุล (ถ้ามี) แล้วใช้แค่ชื่อแรก
+            const firstName = userName.split(' ')[0];
+            eventData.attendees = [firstName];
+            console.log(`No attendees specified, defaulting to current user: ${firstName}`);
+          }
+        }
 
         // ตรวจสอบข้อมูลสำคัญ รวมถึงเช็คว่ามี attendees อย่างน้อย 1 คนหรือไม่
         if (!eventData.subject || !eventData.startDateTime || !eventData.endDateTime || !eventData.attendees || eventData.attendees.length === 0) {
