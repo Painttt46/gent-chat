@@ -78,7 +78,7 @@ async function findUserByShortName(name) {
 }
 
 // ปรับแก้ฟังก์ชัน getUserCalendar เดิม
-async function getUserCalendar(nameOrEmail) {
+async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
   let userEmail = nameOrEmail;
 
   // ถ้าเป็นอีเมลแล้ว ให้ใช้เลย ถ้าไม่ใช่ ให้ค้นหาจากชื่อ
@@ -100,15 +100,27 @@ async function getUserCalendar(nameOrEmail) {
 
   try {
     const token = await getGraphToken();
-    const today = new Date();
-    const startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-    const endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+    
+    // Set date range - default to today if not specified
+    let startDateTime, endDateTime;
+    if (startDate && endDate) {
+      startDateTime = new Date(startDate).toISOString();
+      endDateTime = new Date(endDate).toISOString();
+    } else if (startDate) {
+      const start = new Date(startDate);
+      startDateTime = new Date(start.setHours(0, 0, 0, 0)).toISOString();
+      endDateTime = new Date(start.setHours(23, 59, 59, 999)).toISOString();
+    } else {
+      const today = new Date();
+      startDateTime = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+      endDateTime = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+    }
+    
     const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
 
-    console.log('Fetching calendar for:', userEmail);
+    console.log('Fetching calendar for:', userEmail, 'from', startDateTime, 'to', endDateTime);
 
     const response = await fetch(url, {
-      // ✅ เปลี่ยน: เพิ่ม Header เพื่อระบุ Timezone
       headers: {
         'Authorization': `Bearer ${token}`,
         'Prefer': 'outlook.timezone="Asia/Bangkok"'
@@ -265,13 +277,21 @@ export default async function handler(req, res) {
     // Define function for calendar access
     const calendarFunction = {
       name: "get_user_calendar",
-      description: "Get calendar events for today for a specific user. You can use either their name (like 'weraprat', 'natsarin') or full email address. The system will automatically find the user in the company directory.",
+      description: "Get calendar events for a specific user within a date range. You can use either their name (like 'weraprat', 'natsarin') or full email address. If no dates are specified, it defaults to today only.",
       parameters: {
         type: "OBJECT",
         properties: {
           "userPrincipalName": {
             type: "STRING",
             description: "The user's name or email address. Examples: 'weraprat', 'natsarin', or 'weraprat@gent-s.com'. Just the first name is usually enough."
+          },
+          "startDate": {
+            type: "STRING",
+            description: "Start date in YYYY-MM-DD format (optional). If not provided, defaults to today."
+          },
+          "endDate": {
+            type: "STRING", 
+            description: "End date in YYYY-MM-DD format (optional). If not provided but startDate is given, defaults to same day as startDate."
           }
         },
         required: ["userPrincipalName"]
@@ -336,11 +356,13 @@ Choose FORMAT:CARD when the response would look better with structured formattin
 
       if (call.name === "get_user_calendar") {
         const userEmail = call.args?.userPrincipalName || req.body?.from?.userPrincipalName || req.body?.from?.email;
+        const startDate = call.args?.startDate;
+        const endDate = call.args?.endDate;
 
         if (!userEmail) {
           text = "คุณต้องการให้ฉันตรวจสอบปฏิทินของใครครับ/คะ?";
         } else {
-          const calendarData = await getUserCalendar(userEmail);
+          const calendarData = await getUserCalendar(userEmail, startDate, endDate);
 
           // Build history with function call and response
           const historyWithFunction = [
