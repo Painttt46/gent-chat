@@ -340,7 +340,8 @@ Response format instructions:
   * Professional advice or recommendations
   * When the user asks "how to" questions
   * When providing examples or templates
-  * When the information would benefit from better formatting
+
+**CRITICAL RULE: For ANY request related to viewing a calendar, schedule, or events (e.g., "this week", "tomorrow", "my meetings"), you MUST call the get_user_calendar function. NEVER answer calendar questions from memory or previous conversation turns. Always fetch fresh, real-time data by calling the function.**
 
 Choose FORMAT:CARD when the response would look better with structured formatting.`}]
     };
