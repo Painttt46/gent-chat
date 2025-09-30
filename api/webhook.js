@@ -106,9 +106,9 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     // Set date range - default to today if not specified
     let startDateTime, endDateTime;
     const bangkokTz = 'Asia/Bangkok';
-    
+
     console.log('Date parameters received:', { startDate, endDate });
-    
+
     if (startDate && endDate) {
       // Parse dates and convert to Bangkok timezone, then to UTC
       const start = fromZonedTime(startOfDay(parseISO(startDate)), bangkokTz);
@@ -130,10 +130,10 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
       startDateTime = start.toISOString();
       endDateTime = end.toISOString();
     }
-    
+
     console.log('Final date range:', { startDateTime, endDateTime });
 
-    const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location`;
+    const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location,onlineMeeting`;
 
     console.log('Fetching calendar for:', userEmail, 'from', startDateTime, 'to', endDateTime);
 
@@ -157,6 +157,105 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     return { error: error.message };
   }
 }
+// Create calendar event
+// ✅ แทนที่ฟังก์ชัน createCalendarEvent เดิมด้วยอันนี้
+async function createCalendarEvent({ subject, startDateTime, endDateTime, attendees, bodyContent, location, createMeeting = true }) {
+  try {
+    const token = await getGraphToken();
+
+    // --- ส่วนจัดการ Attendee และ Organizer (เหมือนเดิม) ---
+    let attendeeObjects = [];
+    if (attendees && attendees.length > 0) {
+      const userLookups = await Promise.all(
+        attendees.map(name => findUserByShortName(name.trim()))
+      );
+
+      userLookups.forEach((users, index) => {
+        if (users && users.length === 1) {
+          attendeeObjects.push({
+            emailAddress: {
+              address: users[0].userPrincipalName,
+              name: users[0].displayName
+            },
+            type: "required"
+          });
+        } else {
+          console.warn(`Could not resolve attendee: ${attendees[index]}`);
+        }
+      });
+    }
+
+    const organizer = await findUserByShortName(attendees[0]?.trim());
+    if (!organizer || organizer.length !== 1) {
+      return { error: "ไม่สามารถระบุผู้จัดงาน (organizer) ได้ กรุณาระบุผู้เข้าร่วมอย่างน้อย 1 คนที่เป็นผู้ใช้ในระบบ" };
+    }
+    const organizerEmail = organizer[0].userPrincipalName;
+
+    // --- สร้าง Request Body สำหรับ Graph API ---
+    const event = {
+      subject: subject,
+      body: {
+        contentType: "HTML",
+        content: bodyContent || "This meeting was scheduled by Gent AI Assistant."
+      },
+      start: {
+        dateTime: startDateTime,
+        timeZone: "Asia/Bangkok"
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: "Asia/Bangkok"
+      },
+      location: {
+        displayName: location || ""
+      },
+      attendees: attendeeObjects,
+    };
+
+    // ✅ เพิ่มเงื่อนไขในการสร้าง Meeting Link ตรงนี้
+    if (createMeeting) {
+      event.isOnlineMeeting = true;
+      event.onlineMeetingProvider = "teamsForBusiness";
+    }
+
+    const url = `https://graph.microsoft.com/v1.0/users/${organizerEmail}/events`;
+
+    console.log('Creating event with payload:', JSON.stringify(event, null, 2));
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Graph API create event error:', errorText);
+      return { error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const createdEvent = await response.json();
+    console.log('Event created successfully:', createdEvent.id);
+
+    // ✅ อัปเดตข้อมูลที่ส่งกลับให้ AI
+    return {
+      success: true,
+      subject: createdEvent.subject,
+      startTime: createdEvent.start.dateTime,
+      organizer: createdEvent.organizer.emailAddress.name,
+      webLink: createdEvent.webLink,
+      meetingCreated: createdEvent.isOnlineMeeting || false // ส่งสถานะกลับไปด้วย
+    };
+
+  } catch (error) {
+    console.error('createCalendarEvent error:', error);
+    return { error: error.message };
+  }
+}
+
 async function sendToTeamsWebhook(message) {
   const webhookUrl = 'https://gentsolutions.webhook.office.com/webhookb2/330ce018-1d89-4bde-8a00-7e112b710934@c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906/IncomingWebhook/d5ec6936083f44f7aaf575f90b1f69da/0b176f81-19e0-4b39-8fc8-378244861f9b/V2FcW5LeJmT5RLRTWJR9gSZLh55QhBpny4Nll4VGmIk4I1';
 
@@ -280,7 +379,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check if user wants to broadcast to everyone
+    // Check if user wants to broadcast 
     const isBroadcastCommand = cleanText.toLowerCase().startsWith('/broadcast ');
 
     // Remove (broadcast) from the message before processing
@@ -297,6 +396,7 @@ export default async function handler(req, res) {
       description: `Get calendar events for a user within a specified date range. 
       The model is responsible for interpreting natural language date expressions and converting them into a precise YYYY-MM-DD format for startDate and endDate.
       - If no dates are provided, it defaults to today.
+      - display all parameter form api if can.
       - Understands relative terms based on the current date. For example:
         - "yesterday", "tomorrow"
         - "this week", "next week", "last week" (Assume week starts on Monday)
@@ -324,39 +424,117 @@ export default async function handler(req, res) {
       }
     };
 
+    // Define function for creating calendar events
+    // ภายในฟังก์ชัน handler(req, res)
+
+    // ✅ แทนที่ createEventFunction เดิมด้วยอันนี้
+    const createEventFunction = {
+      name: "create_calendar_event",
+      description: `Creates a new calendar event and sends Microsoft Teams meeting invitations to attendees.
+  - The model must infer the subject, start time, and end time from the user's request.
+  - The current date is ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })}.
+  - It must convert all date/time information into 'YYYY-MM-DDTHH:mm:ss' format. For example, 'tomorrow at 3 PM' should be converted to the correct full timestamp.
+  - The 'attendees' parameter should be an array of short names found in the prompt (e.g., ['weraprat', 'natsarin']). The person organizing the meeting must be the first person in this list.`,
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          "subject": {
+            type: "STRING",
+            description: "The title or subject of the event."
+          },
+          "startDateTime": {
+            type: "STRING",
+            description: "The start date and time in 'YYYY-MM-DDTHH:mm:ss' format."
+          },
+          "endDateTime": {
+            type: "STRING",
+            description: "The end date and time in 'YYYY-MM-DDTHH:mm:ss' format."
+          },
+          "attendees": {
+            type: "ARRAY",
+            description: "A list of attendees' names. The first name in the list will be the meeting organizer. Example: ['weraprat', 'natsarin']",
+            items: {
+              type: "STRING"
+            }
+          },
+          // ✅ จุดที่แก้ไขคือเพิ่ม createMeeting เข้ามาตรงนี้
+          "createMeeting": {
+            type: "BOOLEAN",
+            description: `Set to true to create a Teams meeting link. Set to false for a simple calendar booking. Infer from keywords like 'meeting', 'call' (true) vs 'book', 'reserve', 'block time' (false). Defaults to true.`
+          },
+          "bodyContent": {
+            type: "STRING",
+            description: "Optional. The main description or body of the event in HTML format."
+          },
+          "location": {
+            type: "STRING",
+            description: "Optional. The physical location of the meeting."
+          }
+        },
+        required: ["subject", "startDateTime", "endDateTime", "attendees"]
+      }
+    };
+    // ✅✅✅  นำ systemInstruction นี้ไปวางทับของเดิมในไฟล์ของคุณ ✅✅✅
     const systemInstruction = {
       parts: [{
-        text: `You are Gent, an AI work assistant helping team members in a Microsoft Teams channel. 
+        text: `You are Gent (เจนต์), a proactive and friendly AI work assistant integrated into a Microsoft Teams channel. Your primary goal is to help team members be more productive and collaborative.
 
-Your role:
-- Provide professional, helpful assistance to office workers
-- Be friendly, concise, and actionable in your responses
-- You're part of the team conversation in this Teams channel
-- Help with work-related questions, productivity tips, and general office support
-- You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
+---
 
-IMPORTANT DATE CONTEXT: 
-- Current date: ${new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'})} (YYYY-MM-DD format)
+### **Core Persona & Tone (บุคลิกและน้ำเสียง):**
+- **Name:** Gent (เจนต์)
+- **Personality:** Professional, friendly, slightly informal, and very helpful. You are a member of the team.
+- **Language:** Respond primarily in Thai (ตอบเป็นภาษาไทยเป็นหลัก). Be concise and clear.
+- **Proactive:** Don't just answer; anticipate needs. If a meeting is scheduled, ask if an agenda is needed. If a user seems busy, suggest finding an alternative time.
 
-Response format instructions:
-- For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
-- For any of these, use "FORMAT:CARD" followed by your response:
-  * Lists, steps, or bullet points
-  * Detailed explanations or tutorials
-  * Multiple pieces of information
-  * Structured data or comparisons
-  * Professional advice or recommendations
-  * When the user asks "how to" questions
-  * When providing examples or templates
+---
 
-**CRITICAL RULE: For ANY request related to viewing a calendar, schedule, or events (e.g., "this week", "tomorrow", "my meetings"), you MUST call the get_user_calendar function. NEVER answer calendar questions from memory or previous conversation turns. Always fetch fresh, real-time data by calling the function.**
+### **Key Capabilities & Rules (ความสามารถและกฎการทำงาน):**
+You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
 
-Choose FORMAT:CARD when the response would look better with structured formatting.`}]
+1.  **Viewing Calendars (\`get_user_calendar\`):**
+    * **CRITICAL RULE:** For ANY request about schedules, availability, or events (e.g., "ใครว่างบ้างพรุ่งนี้", "ดูตารางงานของวีรปรัชญ์", "พรุ่งนี้ฉันมีประชุมอะไรไหม"), you **MUST** call the \`get_user_calendar\` function.
+    * **NEVER** answer from memory. Always fetch fresh data.
+    * You can find users by their first name (e.g., 'weraprat', 'natsarin'). You don't need a full email.
+
+2.  **Creating Events (\`Calendar\`):**
+    * **CRITICAL RULE:** For ANY request to book, schedule, create, or set up an event, meeting, or calendar block (e.g., "นัดประชุมให้หน่อย", "จองเวลาพรุ่งนี้"), you **MUST** call the \`Calendar\` function.
+    * **Confirmation is Key:** Before calling the function, **summarize the details** (Subject, Time, Attendees, Meeting Link status) and **ask the user for confirmation**. For example: "โอเคครับ, ผมจะสร้างนัดหมาย 'คุยโปรเจค' พรุ่งนี้ 10:00-11:00 น. มีคุณวีรปรัชญ์เข้าร่วม พร้อมลิงก์ประชุม Teams นะครับ ยืนยันไหมครับ?"
+    * **Handle Ambiguity:** If details are missing (like end time or attendees), **ask clarifying questions**. Don't assume. Example: "ได้เลยครับ ประชุมเริ่ม 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ?"
+    * **Meeting Link Inference:** Use the \`createMeeting\` parameter based on the user's language. Keywords like "ประชุม", "คอล", "meeting", "หารือ" imply \`createMeeting: true\`. Keywords like "จองเวลา", "บล็อกคิว", "ทำงานส่วนตัว" imply \`createMeeting: false\`. If unsure, default to \`true\` and mention it in the confirmation.
+
+---
+
+### **Important Context (ข้อมูลแวดล้อม):**
+- **Current Date:** ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })} (YYYY-MM-DD format). Use this to resolve relative dates like "tomorrow" or "next Friday".
+
+---
+
+### **Response Formatting (รูปแบบการตอบ):**
+- Use Markdown for clear formatting (bolding, bullet points, etc.).
+- **FORMAT:CARD:** Use this for structured responses like lists, summaries, or when presenting calendar data. This helps the system render a nice visual card in Teams.
+- **FORMAT:TEXT:** Use this for simple, conversational replies, confirmations, or questions.
+- **Always start your final response with either \`FORMAT:CARD\` or \`FORMAT:TEXT\`.**
+
+---
+
+### **Example Flow (ตัวอย่างการทำงาน):**
+* **User:** "นัดประชุมวีรปรัชญ์พรุ่งนี้ 10 โมงหน่อยสิ"
+* **Your Thought Process:** Missing end time and confirmation. I need to ask a clarifying question.
+* **Your Response (FORMAT:TEXT):** "ได้เลยครับ นัดประชุมคุณวีรปรัชญ์พรุ่งนี้ 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ 1 ชั่วโมงไหม?"
+* **User:** "ใช่ 1 ชั่วโมง"
+* **Your Thought Process:** Now I have all details. I must confirm before creating the event.
+* **Your Response (FORMAT:TEXT):** "รับทราบครับ ผมกำลังจะสร้างนัดหมาย 'ประชุม' กับคุณวีรปรัชญ์พรุ่งนี้ 10:00 - 11:00 น. พร้อมลิงก์ประชุม Teams นะครับ"
+* **System:** (Calls \`Calendar\` tool after this confirmation)
+* **Your Final Response (FORMAT:CARD):** "เรียบร้อยครับ! ผมได้สร้างนัดหมายและส่งคำเชิญให้คุณวีรปรัชญ์แล้วครับ ✅\\n\\n- **หัวข้อ:** ประชุม\\n- **เวลา:** 10:00 - 11:00 น.\\n- **ผู้เข้าร่วม:** วีรปรัชญ์"
+`
+      }]
     };
+
 
     const model = genAI.getGenerativeModel({
       model: currentModel,
-      tools: [{ functionDeclarations: [calendarFunction] }],
+      tools: [{ functionDeclarations: [calendarFunction, createEventFunction] }],
       systemInstruction: systemInstruction
     });
 
@@ -402,6 +580,29 @@ Choose FORMAT:CARD when the response would look better with structured formattin
           ];
 
           // Generate final response
+          const finalResult = await model.generateContent({
+            contents: historyWithFunction
+          });
+          text = finalResult.response.text();
+        }
+      } else if (call.name === "create_calendar_event") {
+        // รับค่าทั้งหมดจาก call.args ที่ Gemini ส่งมา (ซึ่งตอนนี้จะมี attendees ด้วย)
+        const eventData = call.args;
+
+        // ตรวจสอบข้อมูลสำคัญ รวมถึงเช็คว่ามี attendees อย่างน้อย 1 คนหรือไม่
+        if (!eventData.subject || !eventData.startDateTime || !eventData.endDateTime || !eventData.attendees || eventData.attendees.length === 0) {
+          text = "ขออภัยครับ ข้อมูลสำหรับสร้างนัดหมายไม่ครบถ้วน กรุณาระบุหัวข้อ, เวลาเริ่มต้น-สิ้นสุด, และผู้เข้าร่วมอย่างน้อย 1 คนครับ";
+        } else {
+          // เรียกใช้ฟังก์ชัน createCalendarEvent เวอร์ชันใหม่ที่รับ parameter แค่ตัวเดียว
+          const createResult = await createCalendarEvent(eventData);
+
+          // ส่วนที่เหลือสำหรับส่งข้อมูลกลับไปให้ Gemini สรุปผล
+          const historyWithFunction = [
+            ...conversationHistory,
+            { role: "model", parts: [{ functionCall: call }] },
+            { role: "function", parts: [{ functionResponse: { name: "create_calendar_event", response: createResult } }] }
+          ];
+
           const finalResult = await model.generateContent({
             contents: historyWithFunction
           });
@@ -510,4 +711,5 @@ Choose FORMAT:CARD when the response would look better with structured formattin
       text: `❌ **Gent:** Sorry, I'm having trouble right now. Please try again.\n\nError: ${error.message}`
     });
   }
+
 }
