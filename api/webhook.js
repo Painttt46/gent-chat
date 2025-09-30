@@ -336,7 +336,7 @@ Your role:
 - You can access calendar information for any company employee using just their first name (like 'weraprat', 'natsarin') - no need to ask for full email addresses
 
 IMPORTANT DATE CONTEXT: 
-- Current date: ${new Date().toLocaleDateString('th-TH', {timeZone: 'Asia/Bangkok'})} (YYYY-MM-DD format)
+- Current date: ${new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Bangkok'})} (YYYY-MM-DD format)
 
 Response format instructions:
 - For simple questions, quick answers, or casual chat: respond with "FORMAT:TEXT" followed by your response
