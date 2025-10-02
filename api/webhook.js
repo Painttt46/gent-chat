@@ -676,7 +676,7 @@ export default async function handler(req, res) {
 You have access to three main tools: \`get_user_calendar\`, \`find_available_time\`, and \`create_calendar_event\`.
 
 1.  **Viewing Calendars (\`get_user_calendar\`):**
-    * **RULE:** For simple requests to view schedules or events (e.g., "ดูตารางงานของวีรปรัชญ์"), you **MUST** call the \`get_user_calendar\` function.
+    * **RULE:** For simple requests to view schedules or events (e.g., "ดูตารางงานของ weraprat"), you **MUST** call the \`get_user_calendar\` function.
 
 2.  **Finding Available Time (\`find_available_time\`):**
     * **CRITICAL RULE:** For ANY request to "find a time", "when are we free?", "หาเวลาว่างให้หน่อย", "หาคิวว่าง", you **MUST** call the \`find_available_time\` function.
@@ -688,7 +688,7 @@ You have access to three main tools: \`get_user_calendar\`, \`find_available_tim
         * "ประชุมทุกวันจันทร์" -> \`recurrence: { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['monday'] }, range: { type: 'noEnd', startDate: '...' } }\`
         * "Townhall ทุกวันที่ 15 ของเดือน" -> \`recurrence: { pattern: { type: 'absoluteMonthly', interval: 1, dayOfMonth: 15 }, range: { type: 'noEnd', startDate: '...' } }\`
     * **Attendees:** You can now distinguish between required and optional attendees.
-        * "นัดประชุมวีรปรัชญ์ ส่วนนัฏสรินทร์จะเข้าหรือไม่ก็ได้" -> \`attendees: ['weraprat']\`, \`optionalAttendees: ['natsarin']\`
+        * "นัดประชุม weraprat ส่วนนัฏสรินทร์จะเข้าหรือไม่ก็ได้" -> \`attendees: ['weraprat']\`, \`optionalAttendees: ['natsarin']\`
         * If the user doesn't specify, assume everyone is **required**.
     * **PROACTIVE CONFLICT DETECTION:** The tool automatically checks for conflicts.
         * If the tool returns \`{ "conflict": true, "conflictingAttendees": ["User A"] }\`, it means the creation **failed** because those users are busy.
@@ -873,7 +873,7 @@ You have access to three main tools: \`get_user_calendar\`, \`find_available_tim
     // Save to conversation history (keep last 10 messages)
     history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
-    if (history.length > 20) { // Keep last 10 exchanges (20 messages)
+    if (history.length > 40) { // Keep last 10 exchanges (20 messages)
       history.splice(0, 2);
     }
 
