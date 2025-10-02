@@ -19,8 +19,19 @@ function getCurrentApiKey() {
   return currentApiKeyIndex === 0 ? process.env.GEMINI_API_KEY : process.env.GEMINI_API_KEY_2;
 }
 
+let cachedGraphToken = {
+  token: null,
+  expiresOn: null
+};
+
 // Get Graph API access token
 async function getGraphToken() {
+  // ถ้ามี token ใน cache และยังไม่หมดอายุ ก็ให้ใช้ token นั้นเลย
+  if (cachedGraphToken.token && new Date() < cachedGraphToken.expiresOn) {
+    console.log('Using cached Graph token');
+    return cachedGraphToken.token;
+  }
+
   try {
     const clientConfig = {
       auth: {
@@ -29,23 +40,29 @@ async function getGraphToken() {
         authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`
       }
     };
-
-    console.log('Azure config:', {
-      clientId: process.env.AZURE_CLIENT_ID ? 'Set' : 'Missing',
-      clientSecret: process.env.AZURE_CLIENT_SECRET ? 'Set' : 'Missing',
-      tenantId: process.env.AZURE_TENANT_ID ? 'Set' : 'Missing'
-    });
-
     const cca = new ConfidentialClientApplication(clientConfig);
     const clientCredentialRequest = {
       scopes: ['https://graph.microsoft.com/.default']
     };
 
     const response = await cca.acquireTokenByClientCredential(clientCredentialRequest);
-    console.log('Token acquired successfully');
-    return response.accessToken;
+
+    // เก็บ token และเวลาหมดอายุลงใน cache
+    // ลดเวลาลงเล็กน้อย (เช่น 5 นาที) เพื่อป้องกันปัญหาเรื่องเวลาเหลื่อมกัน
+    if (response && response.accessToken && response.expiresOn) {
+      cachedGraphToken.token = response.accessToken;
+      cachedGraphToken.expiresOn = new Date(response.expiresOn.getTime() - 5 * 60 * 1000);
+      console.log('New Graph token acquired and cached.');
+      return response.accessToken;
+    } else {
+      throw new Error('Failed to acquire token or token response is invalid.');
+    }
+
   } catch (error) {
     console.error('Token acquisition error:', error);
+    // เคลียร์ cache ถ้าหากเกิด error
+    cachedGraphToken.token = null;
+    cachedGraphToken.expiresOn = null;
     throw error;
   }
 }
@@ -157,77 +174,200 @@ async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     return { error: error.message };
   }
 }
-// Create calendar event
-// ✅ แทนที่ฟังก์ชัน createCalendarEvent เดิมด้วยอันนี้
-async function createCalendarEvent({ subject, startDateTime, endDateTime, attendees, bodyContent, location, createMeeting = true }) {
+/**
+ * Finds available time slots for a group of attendees within a given date range.
+ */
+async function findAvailableTime({ attendees, durationInMinutes, startSearch, endSearch }) {
+  try {
+    console.log('Finding available time for:', { attendees, durationInMinutes, startSearch, endSearch });
+    const bangkokTz = 'Asia/Bangkok';
+
+    // 1. Resolve all attendee names to their email addresses (UPNs)
+    const userLookups = await Promise.all(
+      attendees.map(name => findUserByShortName(name.trim()))
+    );
+
+    const resolvedUsers = [];
+    const unresolvedNames = [];
+    userLookups.forEach((users, index) => {
+      if (users && users.length === 1) {
+        resolvedUsers.push(users[0]);
+      } else {
+        unresolvedNames.push(attendees[index]);
+      }
+    });
+
+    if (unresolvedNames.length > 0) {
+      return { error: `ไม่พบผู้ใช้: ${unresolvedNames.join(', ')}` };
+    }
+    if (resolvedUsers.length === 0) {
+      return { error: 'ไม่พบรายชื่อผู้เข้าร่วมที่ถูกต้อง' };
+    }
+
+    // 2. Fetch calendars for all attendees in the specified date range
+    const calendarPromises = resolvedUsers.map(user =>
+      getUserCalendar(user.userPrincipalName, startSearch, endSearch)
+    );
+    const calendarResults = await Promise.all(calendarPromises);
+
+    // 3. Merge all busy slots into a single array
+    let allBusySlots = [];
+    for (const result of calendarResults) {
+      if (result.value) {
+        result.value.forEach(event => {
+          allBusySlots.push({
+            start: new Date(event.start.dateTime + 'Z'), // Append Z to treat as UTC
+            end: new Date(event.end.dateTime + 'Z')
+          });
+        });
+      }
+    }
+
+    // Sort busy slots by start time
+    allBusySlots.sort((a, b) => a.start - b.start);
+
+    // 4. Find gaps between busy slots, considering working hours (9 AM - 6 PM)
+    const availableSlots = [];
+    const workingHoursStart = 9;
+    const workingHoursEnd = 18; // 6 PM
+    let searchDate = fromZonedTime(startOfDay(parseISO(startSearch)), bangkokTz);
+    const searchEndDate = fromZonedTime(endOfDay(parseISO(endSearch)), bangkokTz);
+
+    while (searchDate <= searchEndDate && availableSlots.length < 5) {
+      let potentialSlotStart = toZonedTime(searchDate, bangkokTz);
+      potentialSlotStart.setHours(workingHoursStart, 0, 0, 0);
+
+      const dayEnd = toZonedTime(searchDate, bangkokTz);
+      dayEnd.setHours(workingHoursEnd, 0, 0, 0);
+
+      const todayBusySlots = allBusySlots.filter(slot =>
+        startOfDay(toZonedTime(slot.start, bangkokTz)).getTime() === startOfDay(searchDate).getTime()
+      );
+
+      for (const busySlot of todayBusySlots) {
+        const gapMillis = busySlot.start - potentialSlotStart;
+        const gapMinutes = Math.floor(gapMillis / (1000 * 60));
+
+        if (gapMinutes >= durationInMinutes) {
+          availableSlots.push({
+            start: potentialSlotStart.toISOString(),
+            end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+          });
+          if (availableSlots.length >= 5) break;
+        }
+        potentialSlotStart = new Date(Math.max(potentialSlotStart, busySlot.end));
+      }
+
+      if (availableSlots.length < 5 && potentialSlotStart < dayEnd) {
+        const finalGapMillis = dayEnd - potentialSlotStart;
+        const finalGapMinutes = Math.floor(finalGapMillis / (1000 * 60));
+        if (finalGapMinutes >= durationInMinutes) {
+          availableSlots.push({
+            start: potentialSlotStart.toISOString(),
+            end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+          });
+        }
+      }
+
+      searchDate.setDate(searchDate.getDate() + 1);
+    }
+
+    return { availableSlots: availableSlots.slice(0, 5) };
+  } catch (error) {
+    console.error('findAvailableTime error:', error);
+    return { error: error.message };
+  }
+}
+async function createCalendarEvent({
+  subject,
+  startDateTime,
+  endDateTime,
+  attendees,
+  optionalAttendees = [], // 👥 เพิ่มพารามิเตอร์ใหม่
+  bodyContent,
+  location,
+  createMeeting = true,
+  recurrence = null // 💡 เพิ่มพารามิเตอร์ใหม่
+}) {
   try {
     const token = await getGraphToken();
 
-    // --- ส่วนจัดการ Attendee และ Organizer (เหมือนเดิม) ---
+    // --- ส่วนจัดการ Attendee ---
     let attendeeObjects = [];
-    if (attendees && attendees.length > 0) {
-      const userLookups = await Promise.all(
-        attendees.map(name => findUserByShortName(name.trim()))
-      );
 
-      userLookups.forEach((users, index) => {
+    // 1. จัดการ Required Attendees
+    const requiredLookups = await Promise.all(
+      attendees.map(name => findUserByShortName(name.trim()))
+    );
+
+    let organizerEmail = null;
+    if (requiredLookups.length > 0 && requiredLookups[0] && requiredLookups[0].length === 1) {
+      organizerEmail = requiredLookups[0][0].userPrincipalName;
+    } else {
+      // ถ้าไม่เจอผู้จัดงานใน required list ให้ลองหาจาก optional list
+      if (optionalAttendees.length > 0) {
+        const optionalLookupsForOrganizer = await Promise.all(optionalAttendees.map(name => findUserByShortName(name.trim())));
+        if (optionalLookupsForOrganizer.length > 0 && optionalLookupsForOrganizer[0] && optionalLookupsForOrganizer[0].length === 1) {
+          organizerEmail = optionalLookupsForOrganizer[0][0].userPrincipalName;
+        }
+      }
+    }
+
+    if (!organizerEmail) {
+      return { error: "ไม่สามารถระบุผู้จัดงาน (organizer) ที่ถูกต้องได้ กรุณาระบุผู้เข้าร่วมอย่างน้อย 1 คน" };
+    }
+
+    requiredLookups.forEach((users) => {
+      if (users && users.length === 1) {
+        attendeeObjects.push({
+          emailAddress: { address: users[0].userPrincipalName, name: users[0].displayName },
+          type: "required"
+        });
+      }
+    });
+
+    // 2. 🆕 จัดการ Optional Attendees
+    if (optionalAttendees.length > 0) {
+      const optionalLookups = await Promise.all(
+        optionalAttendees.map(name => findUserByShortName(name.trim()))
+      );
+      optionalLookups.forEach((users) => {
         if (users && users.length === 1) {
           attendeeObjects.push({
-            emailAddress: {
-              address: users[0].userPrincipalName,
-              name: users[0].displayName
-            },
-            type: "required"
+            emailAddress: { address: users[0].userPrincipalName, name: users[0].displayName },
+            type: "optional"
           });
-        } else {
-          console.warn(`Could not resolve attendee: ${attendees[index]}`);
         }
       });
     }
 
-    const organizer = await findUserByShortName(attendees[0]?.trim());
-    if (!organizer || organizer.length !== 1) {
-      return { error: "ไม่สามารถระบุผู้จัดงาน (organizer) ได้ กรุณาระบุผู้เข้าร่วมอย่างน้อย 1 คนที่เป็นผู้ใช้ในระบบ" };
-    }
-    const organizerEmail = organizer[0].userPrincipalName;
+    // --- (ส่วนตรวจจับ CONFLICT สามารถลบออกได้ก่อนถ้ายังไม่ได้เพิ่มฟังก์ชัน find_available_time) ---
+    // แต่ถ้าจะเก็บไว้ก็ไม่เป็นปัญหาครับ
 
-    // --- สร้าง Request Body สำหรับ Graph API ---
+    // --- สร้าง Request Body ---
     const event = {
       subject: subject,
-      body: {
-        contentType: "HTML",
-        content: bodyContent || "This meeting was scheduled by Gent AI Assistant."
-      },
-      start: {
-        dateTime: startDateTime,
-        timeZone: "Asia/Bangkok"
-      },
-      end: {
-        dateTime: endDateTime,
-        timeZone: "Asia/Bangkok"
-      },
-      location: {
-        displayName: location || ""
-      },
+      body: { contentType: "HTML", content: bodyContent || "" },
+      start: { dateTime: startDateTime, timeZone: "Asia/Bangkok" },
+      end: { dateTime: endDateTime, timeZone: "Asia/Bangkok" },
+      location: { displayName: location || "" },
       attendees: attendeeObjects,
     };
 
-    // ✅ เพิ่มเงื่อนไขในการสร้าง Meeting Link ตรงนี้
+    // 3. 🆕 เพิ่ม Recurrence เข้าไปใน event
+    if (recurrence) {
+      event.recurrence = recurrence;
+    }
+
     if (createMeeting) {
       event.isOnlineMeeting = true;
       event.onlineMeetingProvider = "teamsForBusiness";
     }
 
     const url = `https://graph.microsoft.com/v1.0/users/${organizerEmail}/events`;
-
-    console.log('Creating event with payload:', JSON.stringify(event, null, 2));
-
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(event)
     });
 
@@ -238,16 +378,13 @@ async function createCalendarEvent({ subject, startDateTime, endDateTime, attend
     }
 
     const createdEvent = await response.json();
-    console.log('Event created successfully:', createdEvent.id);
-
-    // ✅ อัปเดตข้อมูลที่ส่งกลับให้ AI
     return {
       success: true,
       subject: createdEvent.subject,
       startTime: createdEvent.start.dateTime,
       organizer: createdEvent.organizer.emailAddress.name,
       webLink: createdEvent.webLink,
-      meetingCreated: createdEvent.isOnlineMeeting || false // ส่งสถานะกลับไปด้วย
+      meetingCreated: createdEvent.isOnlineMeeting || false
     };
 
   } catch (error) {
@@ -457,6 +594,39 @@ export default async function handler(req, res) {
               type: "STRING"
             }
           },
+          "optionalAttendees": {
+            type: "ARRAY",
+            description: "A list of OPTIONAL attendees' names. Use for people who are invited but not required to come. Example: ['natsarin']",
+            items: { type: "STRING" }
+          },
+          // 💡 เพิ่ม Property ใหม่สำหรับ Recurrence
+          "recurrence": {
+            type: "OBJECT",
+            description: "Describes the recurrence pattern and range of the event. Use for events that repeat.",
+            properties: {
+              "pattern": {
+                type: "OBJECT",
+                properties: {
+                  "type": { type: "STRING", enum: ["daily", "weekly", "absoluteMonthly", "relativeMonthly", "absoluteYearly", "relativeYearly"] },
+                  "interval": { type: "NUMBER", description: "The number of units between occurrences. E.g., 1 for every week, 2 for every other week." },
+                  "daysOfWeek": { type: "ARRAY", items: { type: "STRING" }, description: "e.g., ['monday', 'wednesday']" },
+                  "dayOfMonth": { type: "NUMBER", description: "Day of the month (1-31) for monthly patterns." }
+                },
+                required: ["type", "interval"]
+              },
+              "range": {
+                type: "OBJECT",
+                properties: {
+                  "type": { type: "STRING", enum: ["endDate", "noEnd", "numberedOccurrences"] },
+                  "startDate": { type: "STRING", description: "The start date of the recurrence in YYYY-MM-DD format." },
+                  "endDate": { type: "STRING", description: "The end date of the recurrence in YYYY-MM-DD format." },
+                  "numberOfOccurrences": { type: "NUMBER", description: "The number of times the event repeats." }
+                },
+                required: ["type", "startDate"]
+              }
+            },
+            required: ["pattern", "range"]
+          },
           // ✅ จุดที่แก้ไขคือเพิ่ม createMeeting เข้ามาตรงนี้
           "createMeeting": {
             type: "BOOLEAN",
@@ -474,77 +644,94 @@ export default async function handler(req, res) {
         required: ["subject", "startDateTime", "endDateTime", "attendees"]
       }
     };
+    const findAvailableTimeFunction = {
+      name: "find_available_time",
+      description: "ค้นหาช่วงเวลาที่ว่างตรงกันสำหรับผู้เข้าร่วมทั้งหมดภายในช่วงวันที่กำหนด ใช้เมื่อผู้ใช้ต้องการ 'หาเวลาว่าง', 'หาคิวว่าง', 'นัดประชุมตอนไหนดี'",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          "attendees": { type: "ARRAY", description: "รายชื่อผู้เข้าร่วมประชุม เช่น ['weraprat', 'natsarin']", items: { type: "STRING" } },
+          "durationInMinutes": { type: "NUMBER", description: "ระยะเวลาประชุมที่ต้องการ (นาที) เช่น 30 หรือ 60" },
+          "startSearch": { type: "STRING", description: "วันเริ่มต้นสำหรับค้นหาในรูปแบบ YYYY-MM-DD" },
+          "endSearch": { type: "STRING", description: "วันสิ้นสุดสำหรับค้นหาในรูปแบบ YYYY-MM-DD" }
+        },
+        required: ["attendees", "durationInMinutes", "startSearch", "endSearch"]
+      }
+    };
 
     const systemInstruction = {
       parts: [{
-        text: `You are Gent , a proactive and friendly AI work assistant integrated into a Microsoft Teams channel. Your primary goal is to help team members be more productive and collaborative.
+        text: `You are Gent, a proactive and highly intelligent AI work assistant integrated into Microsoft Teams. Your primary goal is to facilitate seamless scheduling and calendar management for the team. You must respond in Thai.
 
 ---
 
 ### **Core Persona & Tone :**
 - **Name:** Gent
-- **Personality:** Professional, friendly, slightly informal, and very helpful. You are a member of the team.
+- **Personality:** Professional, friendly, proactive, and a bit like a smart strategist.
 - **Language:** Respond primarily in Thai (ตอบเป็นภาษาไทยเป็นหลัก). Be concise and clear.
-- **Proactive:** Don't just answer; anticipate needs. If a meeting is scheduled, ask if an agenda is needed. If a user seems busy, suggest finding an alternative time.
 
 ---
 
 ### **Key Capabilities & Rules (ความสามารถและกฎการทำงาน):**
-You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
+You have access to three main tools: \`get_user_calendar\`, \`find_available_time\`, and \`create_calendar_event\`.
 
-1.  **Viewing Calendars (\`get_user_calendar\`):**
-    * **CRITICAL RULE:** For ANY request about schedules, availability, or events (e.g., "ใครว่างบ้างพรุ่งนี้", "ดูตารางงานของวีรปรัชญ์", "พรุ่งนี้ฉันมีประชุมอะไรไหม"), you **MUST** call the \`get_user_calendar\` function.
-    * **NEVER** answer from memory. Always fetch fresh data.
-    * You can find users by their first name (e.g., 'weraprat', 'natsarin'). You don't need a full email.
+1.  **Viewing Calendars (\`get_user_calendar\`):**
+    * **RULE:** For simple requests to view schedules or events (e.g., "ดูตารางงานของวีรปรัชญ์"), you **MUST** call the \`get_user_calendar\` function.
 
-2.  **Creating Events (\`Calendar\`):**
-    * **CRITICAL RULE:** For ANY request to book, schedule, create, or set up an event, meeting, or calendar block (e.g., "นัดประชุมให้หน่อย", "จองเวลาพรุ่งนี้"), you **MUST** call the \`Calendar\` function.
-    * **Handling "Myself":** If the user says the meeting is for 'myself', 'me' (ตัวเอง, ฉัน), or doesn't specify any attendees, **DO NOT ask for their name**. Instead, call the tool with an **empty \`attendees\` array** (\`[]\`). The system is designed to automatically use the current user's name in this case.
-    * **Confirmation is Key:** Before calling the function, **summarize the details** (Subject, Time, Attendees, Meeting Link status) and **ask the user for confirmation**. For example: "โอเคครับ, ผมจะสร้างนัดหมาย 'คุยโปรเจค' พรุ่งนี้ 10:00-11:00 น. มีคุณวีรปรัชญ์เข้าร่วม พร้อมลิงก์ประชุม Teams นะครับ ยืนยันไหมครับ?"
-    * **Handle Ambiguity:** If other details are missing (like end time), **ask clarifying questions**. Don't assume. Example: "ได้เลยครับ ประชุมเริ่ม 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ?"
-    * **Meeting Link Inference:** Use the \`createMeeting\` parameter based on the user's language. Keywords like "ประชุม", "คอล", "meeting", "หารือ" imply \`createMeeting: true\`. Keywords like "จองเวลา", "บล็อกคิว", "ทำงานส่วนตัว" imply \`createMeeting: false\`. If unsure, default to \`true\` and mention it in the confirmation.
+2.  **Finding Available Time (\`find_available_time\`):**
+    * **CRITICAL RULE:** For ANY request to "find a time", "when are we free?", "หาเวลาว่างให้หน่อย", "หาคิวว่าง", you **MUST** call the \`find_available_time\` function.
+    * **Action:** After the tool returns available slots, you MUST present these options to the user and ask which one they'd like to book.
 
-3.  **Analytical Capabilities (ความสามารถในการวิเคราะห์):**
-    * After fetching data (like a list of calendar events), you can answer questions that require reasoning, counting, summarizing, or finding patterns in that data.
-    * **Encourage users** to ask follow-up questions about the data you've presented.
-    * **Examples of Analytical Questions you can answer:**
-    * "สรุปให้หน่อยว่าสัปดาห์หน้า weraprat มีประชุมกี่โมงบ้าง" (Summarize what times Weraprat has meetings next week.)
-    * "ใครมีประชุมเยอะที่สุดในวันศุกร์" (Who has the most meetings on Friday?)
-    * "หาช่องว่าง 1 ชั่วโมงสำหรับประชุมให้หน่อยในวันพรุ่งนี้" (Find a 1-hour open slot for a meeting tomorrow.)
-    * "มีประชุมไหนบ้างที่ไม่มีลิงก์ Teams" (Which meetings do not have a Teams link?)
+3.  **Creating Events (\`create_calendar_event\`):**
+    * **CRITICAL RULE:** For ANY request to book, schedule, create, or set up an event, meeting, or calendar block, you **MUST** call the \`create_calendar_event\` function.
+    * **Recurrence:** You can now create repeating events. You MUST infer the recurrence pattern and range from user requests.
+        * "ประชุมทุกวันจันทร์" -> \`recurrence: { pattern: { type: 'weekly', interval: 1, daysOfWeek: ['monday'] }, range: { type: 'noEnd', startDate: '...' } }\`
+        * "Townhall ทุกวันที่ 15 ของเดือน" -> \`recurrence: { pattern: { type: 'absoluteMonthly', interval: 1, dayOfMonth: 15 }, range: { type: 'noEnd', startDate: '...' } }\`
+    * **Attendees:** You can now distinguish between required and optional attendees.
+        * "นัดประชุมวีรปรัชญ์ ส่วนนัฏสรินทร์จะเข้าหรือไม่ก็ได้" -> \`attendees: ['weraprat']\`, \`optionalAttendees: ['natsarin']\`
+        * If the user doesn't specify, assume everyone is **required**.
+    * **PROACTIVE CONFLICT DETECTION:** The tool automatically checks for conflicts.
+        * If the tool returns \`{ "conflict": true, "conflictingAttendees": ["User A"] }\`, it means the creation **failed** because those users are busy.
+        * In this situation, you **MUST NOT** say the event was created. Instead, you must inform the user about the conflict and suggest a next action.
+        * **Your Response MUST be:** "ไม่สามารถสร้างนัดหมายได้ครับ เนื่องจากคุณ [User A] มีนัดหมายอื่นคาบเกี่ยวอยู่ ต้องการให้ผมช่วยหาเวลาว่างอื่นให้แทนไหมครับ?" Then, use the \`find_available_time\` tool if the user agrees.
+    * **Confirmation is Key:** Before calling the function, **summarize all details** (Subject, Time, Attendees, Recurrence) and **ask the user for confirmation**.
 
 ---
 
 ### **Important Context (ข้อมูลแวดล้อม):**
-- **Current Date:** ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })} (YYYY-MM-DD format). Use this to resolve relative dates like "tomorrow" or "next Friday".
+- **Current Date:** ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })}. Use this to resolve relative dates.
 
 ---
 
 ### **Response Formatting (รูปแบบการตอบ):**
-- Use Markdown for clear formatting (bolding, bullet points, etc.).
-- **FORMAT:CARD:** Use this for structured responses like lists, summaries, or when presenting calendar data. This helps the system render a nice visual card in Teams.
-- **FORMAT:TEXT:** Use this for simple, conversational replies, confirmations, or questions.
+- Use Markdown for clear formatting.
+- **FORMAT:CARD:** Use for structured responses like lists or summaries.
+- **FORMAT:TEXT:** Use for simple, conversational replies.
 - **Always start your final response with either \`FORMAT:CARD\` or \`FORMAT:TEXT\`.**
 
 ---
 
 ### **Example Flow (ตัวอย่างการทำงาน):**
-* **User:** "นัดประชุม weraprat พรุ่งนี้ 10 โมงหน่อยสิ"
-* **Your Thought Process:** Missing end time and confirmation. I need to ask a clarifying question.
-* **Your Response (FORMAT:TEXT):** "ได้เลยครับ นัดประชุมคุณ werapart พรุ่งนี้ 10 โมง ใช้เวลาประมาณเท่าไหร่ดีครับ 1 ชั่วโมงไหม?"
-* **User:** "ใช่ 1 ชั่วโมง"
-* **Your Thought Process:** Now I have all details. I must confirm before creating the event.
-* **Your Response (FORMAT:TEXT):** "รับทราบครับ ผมกำลังจะสร้างนัดหมาย 'ประชุม' กับคุณ weraprat พรุ่งนี้ 10:00 - 11:00 น. พร้อมลิงก์ประชุม Teams นะครับ"
-* **System:** (Calls \`Calendar\` tool after this confirmation)
-* **Your Final Response (FORMAT:CARD):** "เรียบร้อยครับ! ผมได้สร้างนัดหมายและส่งคำเชิญให้คุณ weraprat แล้วครับ ✅\\n\\n- **หัวข้อ:** ประชุม\\n- **เวลา:** 10:00 - 11:00 น.\\n- **ผู้เข้าร่วม:** weraprat "
+
+**Flow 1: Handling a booking conflict**
+* **User:** "นัดประชุม Project X ตอนบ่ายสองพรุ่งนี้ให้หน่อย มีผมกับนัฏสรินทร์"
+* **Your Thought Process:** User wants to create an event. I will call \`create_calendar_event\`.
+* **System:** (Calls \`create_calendar_event\` tool. The tool finds a conflict and returns \`{ "conflict": true, "conflictingAttendees": ["Natsarin"] }\`)
+* **Your Response (FORMAT:TEXT):** "ขออภัยครับ ไม่สามารถสร้างนัดหมายได้ เนื่องจากคุณ 'Natsarin' มีนัดหมายอื่นคาบเกี่ยวอยู่ตอนบ่ายสองพอดีครับ ต้องการให้ผมช่วยหาเวลาว่างอื่นสำหรับวันพรุ่งนี้ให้แทนไหมครับ?"
+
+**Flow 2: Creating a Recurring Event**
+* **User:** "นัด Sync ทีมหน่อย ทุกวันศุกร์ 4 โมงเย็น เริ่มศุกร์นี้เลย ส่วน Manager ให้เป็น optional นะ"
+* **Your Thought Process:** This is a recurring event with an optional attendee. I need to build a recurrence object.
+* **Your Confirmation (FORMAT:TEXT):** "รับทราบครับ ผมจะสร้างนัดหมาย 'Sync ทีม' ให้ทุกวันศุกร์ เวลา 16:00 - 17:00 น. โดยเริ่มตั้งแต่วันศุกร์นี้เป็นต้นไป และเชิญ Manager แบบ optional นะครับ ยืนยันไหมครับ?"
 `
       }]
     };
 
 
+
     const model = genAI.getGenerativeModel({
       model: currentModel,
-      tools: [{ functionDeclarations: [calendarFunction, createEventFunction] }],
+      tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }], // <<-- ✅ ต้องมีครบ 3 ตัว
       systemInstruction: systemInstruction
     });
 
@@ -595,30 +782,24 @@ You have access to two main tools: \`get_user_calendar\` and \`Calendar\`.
           });
           text = finalResult.response.text();
         }
+      } else if (call.name === "find_available_time") {
+        const result = await findAvailableTime(call.args);
+
+        const historyWithFunction = [
+          ...conversationHistory,
+          { role: "model", parts: [{ functionCall: call }] },
+          { role: "function", parts: [{ functionResponse: { name: "find_available_time", response: result } }] }
+        ];
+
+        const finalResult = await model.generateContent({
+          contents: historyWithFunction
+        });
+        text = finalResult.response.text();
+
       } else if (call.name === "create_calendar_event") {
         // รับค่าทั้งหมดจาก call.args ที่ Gemini ส่งมา (ซึ่งตอนนี้จะมี attendees ด้วย)
         const eventData = call.args;
-        const userFirstName = req.body?.from?.name?.split(' ')[0];
 
-        if (userFirstName) {
-          // ใช้ Set เพื่อจัดการรายชื่อที่ไม่ซ้ำกัน และทำให้มั่นใจว่าผู้ใช้ปัจจุบันอยู่ในลิสต์เสมอ
-          const finalAttendees = new Set([userFirstName]);
-
-          if (eventData.attendees && eventData.attendees.length > 0) {
-            eventData.attendees.forEach(name => {
-              // ทำความสะอาดข้อมูล: ถ้าเจอคำว่า 'ตัวเอง' ให้ข้ามไป (เพราะเราใส่ชื่อจริงไปแล้ว)
-              // ถ้าเป็นชื่ออื่น ให้เพิ่มเข้าไปใน Set
-              const cleanName = name.trim().toLowerCase();
-              if (cleanName !== 'ตัวเอง' && cleanName !== 'myself' && cleanName !== 'me') {
-                finalAttendees.add(name);
-              }
-            });
-          }
-
-          // แปลง Set กลับไปเป็น Array เพื่อส่งไปใช้งานต่อ
-          eventData.attendees = Array.from(finalAttendees);
-          console.log(`Final processed attendees:`, eventData.attendees);
-        }
 
         // ตรวจสอบข้อมูลสำคัญ รวมถึงเช็คว่ามี attendees อย่างน้อย 1 คนหรือไม่
         if (!eventData.subject || !eventData.startDateTime || !eventData.endDateTime || !eventData.attendees || eventData.attendees.length === 0) {
