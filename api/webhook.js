@@ -2,8 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { parseISO, startOfDay, endOfDay } from 'date-fns';
-
-import db from './db.js';
+import db from '../db.js';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
 
