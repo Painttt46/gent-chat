@@ -299,10 +299,19 @@ function createTodoCard(list, items) {
         "weight": "Bolder",
         "size": "Large"
       },
+      // ✅ [เพิ่มใหม่] แสดงข้อความนี้เมื่อยังไม่มีรายการ
+      {
+        "type": "TextBlock",
+        "text": "ยังไม่มีรายการ...",
+        "wrap": true,
+        "isVisible": false, // เริ่มต้นด้วยการซ่อนไว้
+        "$when": "${count(items) == 0}" // แสดงก็ต่อเมื่อจำนวน items == 0
+      },
+      // ✅ [แก้ไข] ให้ Container นี้แสดงก็ต่อเมื่อมี items > 0
       {
         "type": "Container",
-        // วนลูปข้อมูล items ที่ได้รับมาเพื่อแสดงผล
         "$data": items,
+        "$when": "${count(items) > 0}", // แสดงก็ต่อเมื่อจำนวน items > 0
         "items": [
           {
             "type": "Input.Toggle",
@@ -310,7 +319,6 @@ function createTodoCard(list, items) {
             "title": "${item_text}",
             "value": "${completed ? 'true' : 'false'}",
             "wrap": true,
-            // เมื่อมีการติ๊ก/ไม่ติ๊ก ให้ยิง Action นี้ทันที
             "onExecute": {
               "type": "Action.Execute",
               "verb": "toggle_item",
@@ -319,6 +327,7 @@ function createTodoCard(list, items) {
           }
         ]
       },
+      // --- ส่วน Input และปุ่ม เหมือนเดิม ---
       {
         "type": "Input.Text",
         "id": "newItemText",
