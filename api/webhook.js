@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { parseISO, startOfDay, endOfDay } from 'date-fns';
+
+import db from './db.js';
 // Simple in-memory conversation storage (per user)
 const conversations = new Map();
 
@@ -278,6 +280,87 @@ async function findAvailableTime({ attendees, durationInMinutes, startSearch, en
     return { error: error.message };
   }
 }
+// ฟังก์ชันสำหรับสร้าง "Shared To-Do List" Card
+function createTodoCard(list, items) {
+  return {
+    "type": "AdaptiveCard",
+    "version": "1.6",
+    "refresh": {
+      "userIds": [], // Refresh สำหรับทุกคน
+      "action": {
+        "type": "Action.Execute",
+        "verb": "refresh_todolist",
+        "data": { "listId": list.id }
+      }
+    },
+    "body": [
+      {
+        "type": "TextBlock",
+        "text": list.title,
+        "weight": "Bolder",
+        "size": "Large"
+      },
+      {
+        "type": "Container",
+        // วนลูปข้อมูล items ที่ได้รับมาเพื่อแสดงผล
+        "$data": items,
+        "items": [
+          {
+            "type": "Input.Toggle",
+            "id": "toggle-${id}",
+            "title": "${item_text}",
+            "value": "${completed ? 'true' : 'false'}",
+            "wrap": true,
+            // เมื่อมีการติ๊ก/ไม่ติ๊ก ให้ยิง Action นี้ทันที
+            "onExecute": {
+              "type": "Action.Execute",
+              "verb": "toggle_item",
+              "data": { "listId": list.id, "itemId": "${id}" }
+            }
+          }
+        ]
+      },
+      {
+        "type": "Input.Text",
+        "id": "newItemText",
+        "placeholder": "เพิ่มรายการใหม่...",
+        "spacing": "Medium"
+      },
+      {
+        "type": "ActionSet",
+        "actions": [
+          {
+            "type": "Action.Execute",
+            "title": "เพิ่มรายการ (Add)",
+            "verb": "add_item",
+            "data": { "listId": list.id }
+          }
+        ]
+      }
+    ]
+  };
+}
+
+// const db = require('./path/to/db.js');
+
+async function createTodoList({ title, createdBy, channelId }) {
+  try {
+    // 1. บันทึก list ใหม่ลงฐานข้อมูล
+    const query = 'INSERT INTO todo_lists(title, created_by, channel_id) VALUES($1, $2, $3) RETURNING *;';
+    const result = await db.query(query, [title, createdBy, channelId]);
+    const newList = result.rows[0];
+
+    // 2. สร้าง Card แรก (ที่ยังไม่มี items)
+    const card = createTodoCard(newList, []);
+
+    // 3. ส่งกลับไปให้ handler รู้ว่าต้องตอบกลับเป็น Card
+    return { isAdaptiveCard: true, card: card };
+
+  } catch (error) {
+    console.error("createTodoList error:", error);
+    return { error: "Failed to create to-do list." };
+  }
+}
 async function createCalendarEvent({
   subject,
   startDateTime,
@@ -445,6 +528,57 @@ function getTotalRequests() {
 }
 
 export default async function handler(req, res) {
+  // --- Universal Action Handler (สำหรับ To-Do List) ---
+  const verb = req.body?.value?.action?.verb;
+  if (verb && (verb.startsWith('add_') || verb.startsWith('toggle_') || verb.startsWith('refresh_'))) {
+
+    const data = req.body.value.action.data;
+    const listId = data.listId;
+
+    try {
+      // --- ส่วนประมวลผล Action ---
+      switch (verb) {
+        case 'add_item':
+          const newItemText = req.body.value.action.data.newItemText;
+          if (newItemText) {
+            await db.query('INSERT INTO todo_items(list_id, item_text) VALUES($1, $2);', [listId, newItemText]);
+          }
+          break;
+        case 'toggle_item':
+          const itemId = data.itemId;
+          // พลิกสถานะ completed จาก true เป็น false หรือกลับกัน
+          await db.query('UPDATE todo_items SET completed = NOT completed WHERE id = $1;', [itemId]);
+          break;
+        case 'refresh_todolist':
+          // ไม่ต้องทำอะไร แค่โหลดข้อมูลใหม่ตามปกติ
+          break;
+      }
+
+      // --- ส่วนดึงข้อมูลล่าสุดเพื่อสร้าง Card ใหม่ ---
+      const listResult = await db.query('SELECT * FROM todo_lists WHERE id = $1;', [listId]);
+      const itemsResult = await db.query('SELECT * FROM todo_items WHERE list_id = $1 ORDER BY created_at ASC;', [listId]);
+
+      const list = listResult.rows[0];
+      const items = itemsResult.rows;
+
+      if (!list) return res.status(404).json({});
+
+      // สร้าง Card ใหม่พร้อมข้อมูลล่าสุด
+      const updatedCard = createTodoCard(list, items);
+
+      // ส่ง Card กลับไปใน body ของ response เพื่อให้ Teams ทำการ refresh
+      return res.status(200).json({
+        statusCode: 200,
+        type: "application/vnd.microsoft.card.adaptive",
+        value: updatedCard
+      });
+
+    } catch (error) {
+      console.error("Card Action handler error:", error);
+      return res.status(500).json({});
+    }
+  }
+  // --- โค้ด handler เดิมของคุณจะอยู่ต่อจากตรงนี้ ---
   // Only handle POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -561,8 +695,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // Define function for creating calendar events
-    // ภายในฟังก์ชัน handler(req, res)
+
 
     // ✅ แทนที่ createEventFunction เดิมด้วยอันนี้
     const createEventFunction = {
@@ -659,6 +792,21 @@ export default async function handler(req, res) {
       }
     };
 
+    const createTodoListFunction = {
+      name: "create_todo_list",
+      description: "สร้าง To-Do List ที่แชร์และแก้ไขร่วมกันได้ในแชท ใช้สำหรับสร้าง Agenda ประชุม หรือ Task list",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          "title": {
+            type: "STRING",
+            description: "ชื่อหัวข้อของ To-Do List เช่น 'Agenda for Project X'"
+          }
+        },
+        required: ["title"]
+      }
+    };
+
     const systemInstruction = {
       parts: [{
         text: `You are Gent, a proactive and highly intelligent AI work assistant integrated into Microsoft Teams. Your primary goal is to facilitate seamless scheduling and calendar management for the team. You must respond in Thai.
@@ -696,6 +844,9 @@ You have access to three main tools: \`get_user_calendar\`, \`find_available_tim
         * **Your Response MUST be:** "ไม่สามารถสร้างนัดหมายได้ครับ เนื่องจากคุณ [User A] มีนัดหมายอื่นคาบเกี่ยวอยู่ ต้องการให้ผมช่วยหาเวลาว่างอื่นให้แทนไหมครับ?" Then, use the \`find_available_time\` tool if the user agrees.
     * **Confirmation is Key:** Before calling the function, **summarize all details** (Subject, Time, Attendees, Recurrence) and **ask the user for confirmation**.
 
+4.  **Creating a Shared To-Do List (\`create_todo_list\`):**
+    * For any request to "create a to-do list", "make a task list", "create an agenda" (สร้าง to-do, สร้าง agenda), you MUST call the \`create_todo_list\` function.
+
 ---
 
 ### **Important Context (ข้อมูลแวดล้อม):**
@@ -731,7 +882,8 @@ You have access to three main tools: \`get_user_calendar\`, \`find_available_tim
 
     const model = genAI.getGenerativeModel({
       model: currentModel,
-      tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }], // <<-- ✅ ต้องมีครบ 3 ตัว
+      // เพิ่ม createTodoListFunction เข้าไปเป็นตัวที่ 4
+      tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, createTodoListFunction] }],
       systemInstruction: systemInstruction
     });
 
@@ -847,7 +999,28 @@ You have access to three main tools: \`get_user_calendar\`, \`find_available_tim
           }
 
         }
-      } else {
+      }
+      else if (call.name === "create_todo_list") {
+        // ส่งข้อมูลผู้ใช้และ channel ไปด้วย
+        call.args.createdBy = req.body.from.name;
+        call.args.channelId = req.body.conversation.id;
+
+        const result = await createTodoList(call.args);
+
+        if (result.isAdaptiveCard) {
+          return res.status(200).json({
+            type: "message",
+            attachments: [{
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: result.card
+            }]
+          });
+        }
+        // จัดการกรณี error
+        text = result.error || "Could not create the to-do list.";
+
+      }
+      else {
         text = "Unknown function called.";
       }
     } else {
