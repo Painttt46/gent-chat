@@ -1,6 +1,6 @@
 // services/gemini.service.js
 
-import { GoogleGenerativeAI } from '@google-generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { calendarFunction, createEventFunction, findAvailableTimeFunction, systemInstruction } from '../config/gent.config.js';
 
 export async function getGeminiResponse(apiKey, modelName, history) {

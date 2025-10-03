@@ -7,7 +7,7 @@ export const models = {
 };
 export const userModels = new Map(); // Track current model per user
 let lastResetDate = new Date().toDateString();
-let currentApiKeyIndex = 0; // 0 for primary, 1 for secondary
+export let currentApiKeyIndex = 0; // 0 for primary, 1 for secondary
 
 // Get current API key
 export function getCurrentApiKey() {

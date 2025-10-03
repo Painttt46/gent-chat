@@ -1,9 +1,9 @@
 // api/webhook.js
 
-import * as stateService from '../services/state.service.js';
-import * as graphService from '../services/graph.service.js';
-import * as teamsService from '../services/teams.service.js';
-import * as geminiService from '../services/gemini.service.js';
+import * as stateService from '../services/state.js';
+import * as graphService from '../services/graphAPI.js';
+import * as teamsService from '../services/teams.js';
+import * as geminiService from '../services/gemini.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
