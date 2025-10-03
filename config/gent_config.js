@@ -226,7 +226,20 @@ export async function findAvailableTime({ attendees, durationInMinutes, startSea
     }
 }
 
-const systemInstruction = {
+const findAvailableTimeFunction = {
+    name: "find_available_time",
+    description: "ค้นหาช่วงเวลาที่ว่างตรงกันสำหรับผู้เข้าร่วมทั้งหมดภายในช่วงวันที่กำหนด ใช้เมื่อผู้ใช้ต้องการ 'หาเวลาว่าง', 'หาคิวว่าง', 'นัดประชุมตอนไหนดี'",
+    parameters: {
+        type: "OBJECT",
+        properties: {
+            "attendees": { type: "ARRAY", description: "รายชื่อผู้เข้าร่วมประชุม เช่น ['weraprat', 'natsarin']", items: { type: "STRING" } },
+            "durationInMinutes": { type: "NUMBER", description: "ระยะเวลาประชุมที่ต้องการ (นาที) เช่น 30 หรือ 60" },
+            "startSearch": { type: "STRING", description: "วันเริ่มต้นสำหรับค้นหาในรูปแบบ YYYY-MM-DD" },
+            "endSearch": { type: "STRING", description: "วันสิ้นสุดสำหรับค้นหาในรูปแบบ YYYY-MM-DD" }
+        },
+        required: ["attendees", "durationInMinutes", "startSearch", "endSearch"]
+    }
+};const systemInstruction = {
     parts: [{
         text:
             `You are Gent, a proactive and highly intelligent AI work assistant integrated into Microsoft Teams. Your primary goal is to facilitate seamless scheduling and calendar management for the team. You must respond in Thai.
