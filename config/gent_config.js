@@ -111,6 +111,120 @@ const createEventFunction = {
     }
 };
 
+export async function findAvailableTime({ attendees, durationInMinutes, startSearch, endSearch }) {
+    try {
+        console.log('Finding available time for:', { attendees, durationInMinutes, startSearch, endSearch });
+        const bangkokTz = 'Asia/Bangkok';
+
+        // 1. Resolve all attendee names to their email addresses (UPNs) - เหมือนเดิม
+        const userLookups = await Promise.all(
+            attendees.map(name => findUserByShortName(name.trim()))
+        );
+        // ... (ส่วน user resolution เหมือนเดิม)
+
+        // 2. Fetch calendars for all attendees - เหมือนเดิม
+        const calendarPromises = resolvedUsers.map(user =>
+            getUserCalendar(user.userPrincipalName, startSearch, endSearch)
+        );
+        const calendarResults = await Promise.all(calendarPromises);
+
+        // 3. Merge all busy slots into a single array - เหมือนเดิม
+        let allBusySlots = [];
+        for (const result of calendarResults) {
+            if (result.value) {
+                result.value.forEach(event => {
+                    allBusySlots.push({
+                        start: new Date(event.start.dateTime + 'Z'),
+                        end: new Date(event.end.dateTime + 'Z')
+                    });
+                });
+            }
+        }
+
+        // Sort busy slots by start time - เหมือนเดิม
+        allBusySlots.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+        // ✨✨✨ --- START: ส่วนที่เพิ่มเข้ามาใหม่ --- ✨✨✨
+        // 4. Merge overlapping and adjacent busy slots
+        if (allBusySlots.length === 0) {
+            // If there are no busy slots, the whole day is free.
+        }
+
+        const mergedSlots = [];
+        if (allBusySlots.length > 0) {
+            mergedSlots.push({ ...allBusySlots[0] });
+
+            for (let i = 1; i < allBusySlots.length; i++) {
+                const lastMergedSlot = mergedSlots[mergedSlots.length - 1];
+                const currentSlot = allBusySlots[i];
+
+                // If the current slot overlaps with the last merged one, extend the end time
+                if (currentSlot.start <= lastMergedSlot.end) {
+                    lastMergedSlot.end = new Date(Math.max(lastMergedSlot.end.getTime(), currentSlot.end.getTime()));
+                } else {
+                    // Otherwise, it's a new distinct busy period
+                    mergedSlots.push({ ...currentSlot });
+                }
+            }
+        }
+        console.log('Merged busy slots:', mergedSlots);
+        // ✨✨✨ --- END: ส่วนที่เพิ่มเข้ามาใหม่ --- ✨✨✨
+
+
+        // 5. Find gaps between the MERGED busy slots (ไม่ใช่ allBusySlots)
+        const availableSlots = [];
+        const workingHoursStart = 9;
+        const workingHoursEnd = 18; // 6 PM
+        let searchDate = fromZonedTime(startOfDay(parseISO(startSearch)), bangkokTz);
+        const searchEndDate = fromZonedTime(endOfDay(parseISO(endSearch)), bangkokTz);
+
+        while (searchDate <= searchEndDate && availableSlots.length < 5) {
+            let potentialSlotStart = toZonedTime(searchDate, bangkokTz);
+            potentialSlotStart.setHours(workingHoursStart, 0, 0, 0);
+
+            const dayEnd = toZonedTime(searchDate, bangkokTz);
+            dayEnd.setHours(workingHoursEnd, 0, 0, 0);
+
+            // ❗ เปลี่ยนมาใช้ mergedSlots แทน allBusySlots
+            const todayBusySlots = mergedSlots.filter(slot =>
+                startOfDay(toZonedTime(slot.start, bangkokTz)).getTime() === startOfDay(searchDate).getTime()
+            );
+
+            for (const busySlot of todayBusySlots) {
+                const gapMillis = busySlot.start.getTime() - potentialSlotStart.getTime();
+                const gapMinutes = Math.floor(gapMillis / (1000 * 60));
+
+                if (gapMinutes >= durationInMinutes) {
+                    availableSlots.push({
+                        start: potentialSlotStart.toISOString(),
+                        // คำนวณเวลาสิ้นสุดให้ถูกต้องตาม duration ที่ต้องการ
+                        end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+                    });
+                    if (availableSlots.length >= 5) break;
+                }
+                potentialSlotStart = new Date(Math.max(potentialSlotStart.getTime(), busySlot.end.getTime()));
+            }
+
+            if (availableSlots.length < 5 && potentialSlotStart < dayEnd) {
+                const finalGapMillis = dayEnd.getTime() - potentialSlotStart.getTime();
+                const finalGapMinutes = Math.floor(finalGapMillis / (1000 * 60));
+                if (finalGapMinutes >= durationInMinutes) {
+                    availableSlots.push({
+                        start: potentialSlotStart.toISOString(),
+                        end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+                    });
+                }
+            }
+
+            searchDate.setDate(searchDate.getDate() + 1);
+        }
+
+        return { availableSlots: availableSlots.slice(0, 5) };
+    } catch (error) {
+        console.error('findAvailableTime error:', error);
+        return { error: error.message };
+    }
+}
 
 const systemInstruction = {
     parts: [{
@@ -180,4 +294,4 @@ const systemInstruction = {
         `
     }]
 };
-export { calendarFunction, createEventFunction, systemInstruction };
+export { calendarFunction, createEventFunction, findAvailableTimeFunction, systemInstruction };

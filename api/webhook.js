@@ -67,6 +67,9 @@ export default async function handler(req, res) {
         case "get_user_calendar":
           functionResult = await graphService.getUserCalendar(call.args.userPrincipalName, call.args.startDate, call.args.endDate);
           break;
+        case "find_available_time":
+          functionResult = await graphService.findAvailableTime(call.args);
+          break;
         case "create_calendar_event":
           functionResult = await graphService.createCalendarEvent(call.args);
           break;

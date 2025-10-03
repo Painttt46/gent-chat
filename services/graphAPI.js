@@ -124,7 +124,89 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
     }
 }
 
-
+export async function findAvailableTime({ attendees, durationInMinutes, startSearch, endSearch }) {
+    // The full implementation of this function is long, so it's copied here directly.
+    // ... (Paste the entire findAvailableTime function code from the original file here)
+    try {
+        console.log('Finding available time for:', { attendees, durationInMinutes, startSearch, endSearch });
+        const bangkokTz = 'Asia/Bangkok';
+        const userLookups = await Promise.all(
+            attendees.map(name => findUserByShortName(name.trim()))
+        );
+        const resolvedUsers = [];
+        const unresolvedNames = [];
+        userLookups.forEach((users, index) => {
+            if (users && users.length === 1) {
+                resolvedUsers.push(users[0]);
+            } else {
+                unresolvedNames.push(attendees[index]);
+            }
+        });
+        if (unresolvedNames.length > 0) {
+            return { error: `ไม่พบผู้ใช้: ${unresolvedNames.join(', ')}` };
+        }
+        if (resolvedUsers.length === 0) {
+            return { error: 'ไม่พบรายชื่อผู้เข้าร่วมที่ถูกต้อง' };
+        }
+        const calendarPromises = resolvedUsers.map(user =>
+            getUserCalendar(user.userPrincipalName, startSearch, endSearch)
+        );
+        const calendarResults = await Promise.all(calendarPromises);
+        let allBusySlots = [];
+        for (const result of calendarResults) {
+            if (result.value) {
+                result.value.forEach(event => {
+                    allBusySlots.push({
+                        start: new Date(event.start.dateTime + 'Z'),
+                        end: new Date(event.end.dateTime + 'Z')
+                    });
+                });
+            }
+        }
+        allBusySlots.sort((a, b) => a.start - b.start);
+        const availableSlots = [];
+        const workingHoursStart = 9;
+        const workingHoursEnd = 18;
+        let searchDate = fromZonedTime(startOfDay(parseISO(startSearch)), bangkokTz);
+        const searchEndDate = fromZonedTime(endOfDay(parseISO(endSearch)), bangkokTz);
+        while (searchDate <= searchEndDate && availableSlots.length < 5) {
+            let potentialSlotStart = toZonedTime(searchDate, bangkokTz);
+            potentialSlotStart.setHours(workingHoursStart, 0, 0, 0);
+            const dayEnd = toZonedTime(searchDate, bangkokTz);
+            dayEnd.setHours(workingHoursEnd, 0, 0, 0);
+            const todayBusySlots = allBusySlots.filter(slot =>
+                startOfDay(toZonedTime(slot.start, bangkokTz)).getTime() === startOfDay(searchDate).getTime()
+            );
+            for (const busySlot of todayBusySlots) {
+                const gapMillis = busySlot.start - potentialSlotStart;
+                const gapMinutes = Math.floor(gapMillis / (1000 * 60));
+                if (gapMinutes >= durationInMinutes) {
+                    availableSlots.push({
+                        start: potentialSlotStart.toISOString(),
+                        end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+                    });
+                    if (availableSlots.length >= 5) break;
+                }
+                potentialSlotStart = new Date(Math.max(potentialSlotStart, busySlot.end));
+            }
+            if (availableSlots.length < 5 && potentialSlotStart < dayEnd) {
+                const finalGapMillis = dayEnd - potentialSlotStart;
+                const finalGapMinutes = Math.floor(finalGapMillis / (1000 * 60));
+                if (finalGapMinutes >= durationInMinutes) {
+                    availableSlots.push({
+                        start: potentialSlotStart.toISOString(),
+                        end: new Date(potentialSlotStart.getTime() + durationInMinutes * 60000).toISOString()
+                    });
+                }
+            }
+            searchDate.setDate(searchDate.getDate() + 1);
+        }
+        return { availableSlots: availableSlots.slice(0, 5) };
+    } catch (error) {
+        console.error('findAvailableTime error:', error);
+        return { error: error.message };
+    }
+}
 
 export async function createCalendarEvent({
     subject,
