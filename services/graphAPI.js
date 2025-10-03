@@ -157,8 +157,8 @@ export async function findAvailableTime({ attendees, durationInMinutes, startSea
             if (result.value) {
                 result.value.forEach(event => {
                     allBusySlots.push({
-                        start: new Date(event.start.dateTime + 'Z'),
-                        end: new Date(event.end.dateTime + 'Z')
+                        start: new Date(event.start.dateTime),
+                        end: new Date(event.end.dateTime)
                     });
                 });
             }

@@ -98,7 +98,7 @@ export default async function handler(req, res) {
       history.splice(0, 2);
     }
 
-    const usageStats = `💬 ${history.length / 2} msgs | ${stateService.models[currentModel].name} | ${stateService.models[currentModel].count}/${stateService.models[currentModel].limit} reqs | API ${stateService.currentApiKeyIndex + 1}/2`;
+    const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${stateService.models[currentModel].name} | ${stateService.models[currentModel].count}/${stateService.models[currentModel].limit} reqs | API ${stateService.currentApiKeyIndex + 1}/2`;
 
     if (isBroadcastCommand) {
       await teamsService.sendToTeamsWebhook(`🔊 **Announcement:**\n\n${cleanResponse}\n\n${usageStats}`);
