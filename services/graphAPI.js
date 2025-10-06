@@ -1,5 +1,5 @@
 
-// services/graph.service.js
+
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
@@ -10,7 +10,6 @@ let cachedGraphToken = {
     expiresOn: null
 };
 
-// This function is internal to this service and doesn't need to be exported.
 async function getGraphToken() {
     if (cachedGraphToken.token && new Date() < cachedGraphToken.expiresOn) {
         console.log('Using cached Graph token');
@@ -120,16 +119,16 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
         const data = await response.json();
 
 
-        if (data.value && startDate) { // ใช้ตัวแปร startDate ที่เป็น string 'YYYY-MM-DD'
+        if (data.value && startDate) {
             data.value = data.value.filter(event => {
-                // กรณีเป็นกิจกรรมเต็มวัน (All Day)
+
                 if (event.isAllDay) {
-                    // เพิ่ม .substring(0, 10) เพื่อตัดเอาเฉพาะวันที่ 'YYYY-MM-DD' มาเปรียบเทียบ
+
                     return event.end.dateTime.substring(0, 10) > startDate;
                 }
 
                 else {
-                    const queryStartBoundary = new Date(startDateTime); // 'startDateTime' คือเวลาเต็มรูปแบบ ISO
+                    const queryStartBoundary = new Date(startDateTime);
                     const eventEnd = new Date(event.end.dateTime);
 
                     return eventEnd > queryStartBoundary;
@@ -148,8 +147,8 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
 }
 
 export async function findAvailableTime({ attendees, durationInMinutes, startSearch, endSearch }) {
-    // The full implementation of this function is long, so it's copied here directly.
-    // ... (Paste the entire findAvailableTime function code from the original file here)
+
+
     try {
         console.log('Finding available time for:', { attendees, durationInMinutes, startSearch, endSearch });
         const bangkokTz = 'Asia/Bangkok';
@@ -242,8 +241,8 @@ export async function createCalendarEvent({
     createMeeting = true,
     recurrence = null
 }) {
-    // The full implementation of this function is long, so it's copied here directly.
-    // ... (Paste the entire createCalendarEvent function code from the original file here)
+
+
     try {
         const token = await getGraphToken();
         let attendeeObjects = [];
