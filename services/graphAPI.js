@@ -124,8 +124,8 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
             data.value = data.value.filter(event => {
                 // กรณีเป็นกิจกรรมเต็มวัน (All Day)
                 if (event.isAllDay) {
-
-                    return event.end.dateTime > startDate;
+                    // เพิ่ม .substring(0, 10) เพื่อตัดเอาเฉพาะวันที่ 'YYYY-MM-DD' มาเปรียบเทียบ
+                    return event.end.dateTime.substring(0, 10) > startDate;
                 }
 
                 else {
