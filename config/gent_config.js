@@ -9,7 +9,7 @@ const calendarFunction = {
         - "this week", "next week", "last week" (Assume week starts on Monday)
         - "this month", "next month", "last month"
       - The model MUST calculate the exact start and end dates before calling the tool. For example, if the user asks for "next week", the model should calculate the dates for the upcoming Monday and Sunday and pass them as startDate and endDate.
-      - if user ask for full detail of event, send all detail of event from api.`,
+      - if user ask for full detail of event, send all detail of event from api (if event have meeting also send the url link of meeting). `,
       
 
     parameters: {
