@@ -105,7 +105,7 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
             startDateTime = start.toISOString();
             endDateTime = end.toISOString();
         }
-        const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location,onlineMeeting`;
+        const url = `https://graph.microsoft.com/v1.0/users/${userEmail}/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=subject,body,bodyPreview,organizer,attendees,start,end,location,onlineMeeting,isAllDay`;
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -120,13 +120,20 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
         const data = await response.json();
 
 
-        if (data.value && startDateTime) {
-            const queryStartBoundary = new Date(startDateTime);
-
+        if (data.value && startDate) { // ใช้ตัวแปร startDate ที่เป็น string 'YYYY-MM-DD'
             data.value = data.value.filter(event => {
-                const eventEnd = new Date(event.end.dateTime);
+                // กรณีเป็นกิจกรรมเต็มวัน (All Day)
+                if (event.isAllDay) {
 
-                return eventEnd > queryStartBoundary;
+                    return event.end.dateTime > startDate;
+                }
+
+                else {
+                    const queryStartBoundary = new Date(startDateTime); // 'startDateTime' คือเวลาเต็มรูปแบบ ISO
+                    const eventEnd = new Date(event.end.dateTime);
+
+                    return eventEnd > queryStartBoundary;
+                }
             });
         }
 
