@@ -116,7 +116,14 @@ export default async function handler(req, res) {
               { type: "TextBlock", text: "🤖 Gent - Work Assistant", weight: "Bolder", size: "Medium", color: "Accent" },
               { type: "TextBlock", text: cleanResponse, wrap: true, spacing: "Medium" },
               { type: "TextBlock", text: usageStats, size: "Small", color: "Good", weight: "Bolder", spacing: "Medium" }
-            ]
+            ],
+            actions: meetingUrl ? [
+            {
+                type: "Action.OpenUrl",
+                title: "🚀 Join Meeting",
+                url: meetingUrl
+            }
+        ] : undefined
           }
         }]
       });
@@ -128,4 +135,5 @@ export default async function handler(req, res) {
     console.error('Handler Error:', error);
     res.status(500).json({ text: `❌ **Gent Error:** ${error.message}` });
   }
+
 }
