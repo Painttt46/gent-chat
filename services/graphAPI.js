@@ -117,11 +117,27 @@ export async function getUserCalendar(nameOrEmail, startDate = null, endDate = n
             console.error('Graph API error response:', errorText);
             return { error: `ไม่สามารถดึงข้อมูลปฏิทินของ ${userEmail} ได้ครับ` };
         }
-        return await response.json();
+        const data = await response.json();
+
+
+        if (data.value && startDateTime) {
+            const queryStartBoundary = new Date(startDateTime);
+
+            data.value = data.value.filter(event => {
+                const eventEnd = new Date(event.end.dateTime);
+
+                return eventEnd > queryStartBoundary;
+            });
+        }
+
+
+        return data;
+
     } catch (error) {
         console.error('Graph API error:', error);
         return { error: error.message };
     }
+
 }
 
 export async function findAvailableTime({ attendees, durationInMinutes, startSearch, endSearch }) {

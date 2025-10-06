@@ -45,7 +45,7 @@ export default async function handler(req, res) {
       return res.status(200).json({});
     }
 
-    const isBroadcastCommand = cleanText.toLowerCase().startsWith('/broadcast ');
+    const isBroadcastCommand = cleanText.toLowerCase().startsWith('/broadcast');
     const finalText = isBroadcastCommand ? cleanText.substring(10).trim() : cleanText;
 
     if (!stateService.conversations.has(userId)) {
