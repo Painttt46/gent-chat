@@ -22,7 +22,7 @@ async function login() {
       password: CEM_PASSWORD
     });
     
-    authToken = response.data.token;
+    authToken = response.data.access_token;
     tokenExpiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
     console.log('✅ CEM API login successful');
     return authToken;
