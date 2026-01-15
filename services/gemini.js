@@ -66,17 +66,38 @@ export async function getGeminiResponse(apiKey, modelName, history) {
         
         // เพิ่ม CEM context ถ้ามีคำถามเกี่ยวข้อง
         const lastMessage = history[history.length - 1];
+        let cemContext = '';
         if (lastMessage?.parts?.[0]?.text) {
-            const cemContext = await getCEMContext(lastMessage.parts[0].text);
+            cemContext = await getCEMContext(lastMessage.parts[0].text);
             if (cemContext) {
+                console.log('📊 CEM Context added to message');
                 lastMessage.parts[0].text += cemContext;
             }
         }
 
+        // สร้าง systemInstruction ใหม่ที่รวม CEM info
+        const cemSystemInstruction = {
+            parts: [{
+                text: systemInstruction.parts[0].text + `
+
+---
+
+### **CEM System Integration (ระบบจัดการพนักงาน):**
+คุณสามารถเข้าถึงข้อมูลจากระบบ CEM (Company Employee Management) ได้ ซึ่งรวมถึง:
+- **พนักงาน (Users):** รายชื่อ, ตำแหน่ง, แผนก, อีเมล
+- **โครงการ (Tasks):** รายการโครงการ, สถานะ, กำหนดส่ง
+- **การลา (Leave):** ใบลา, ประเภทการลา, สถานะอนุมัติ
+- **การจองรถ (Car Booking):** รายการจองรถ, วันเวลา, สถานะ
+
+เมื่อผู้ใช้ถามเกี่ยวกับข้อมูลเหล่านี้ ข้อมูลจะถูกแนบมาในข้อความ ให้ใช้ข้อมูลนั้นตอบคำถาม
+`
+            }]
+        };
+
         const model = genAI.getGenerativeModel({
             model: modelName,
             tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
-            systemInstruction: systemInstruction + '\n\nคุณสามารถเข้าถึงข้อมูลจากระบบ CEM (Company Employee Management) ได้ รวมถึงข้อมูลพนักงาน, โครงการ, การลา, และการจองรถ'
+            systemInstruction: cemSystemInstruction
         });
 
         const result = await withTimeout(

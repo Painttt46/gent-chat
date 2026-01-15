@@ -47,13 +47,14 @@ export async function getCEMData(endpoint) {
     const response = await cemClient.get(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    console.log(`✅ CEM API (${endpoint}): ${Array.isArray(response.data) ? response.data.length + ' items' : 'ok'}`);
     return response.data;
   } catch (error) {
     if (error.response?.status === 401) {
       authToken = null;
       return getCEMData(endpoint);
     }
-    console.error(`CEM API Error (${endpoint}):`, error.message);
+    console.error(`❌ CEM API Error (${endpoint}):`, error.message);
     return null;
   }
 }
