@@ -1,0 +1,15 @@
+services:
+  chatbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gent-chatbot
+    ports:
+      - "3002:3000"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Bangkok
+    restart: unless-stopped
+    network_mode: host

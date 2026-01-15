@@ -93,6 +93,7 @@ export default async function handler(req, res) {
     const isCardFormat = text.startsWith('FORMAT:CARD');
     let cleanResponse = text.replace(/FORMAT:(CARD|TEXT)/, '').trim() || "I'm sorry, I couldn't generate a proper response.";
 
+    history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
     if (history.length > 40) {
       history.splice(0, 2);
@@ -117,7 +118,6 @@ export default async function handler(req, res) {
               { type: "TextBlock", text: cleanResponse, wrap: true, spacing: "Medium" },
               { type: "TextBlock", text: usageStats, size: "Small", color: "Good", weight: "Bolder", spacing: "Medium" }
             ]
-
           }
         }]
       });
@@ -127,7 +127,10 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Handler Error:', error);
-    res.status(500).json({ text: `❌ **Gent Error:** ${error.message}` });
+    const errorMsg = error.message === 'Request timeout' 
+      ? '⏱️ Request timeout. Please try again.' 
+      : `❌ **Gent Error:** ${error.message}`;
+    res.status(500).json({ text: errorMsg });
   }
 
 }

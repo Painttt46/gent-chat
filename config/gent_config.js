@@ -9,8 +9,8 @@ const calendarFunction = {
         - "this week", "next week", "last week" (Assume week starts on Monday)
         - "this month", "next month", "last month"
       - The model MUST calculate the exact start and end dates before calling the tool. For example, if the user asks for "next week", the model should calculate the dates for the upcoming Monday and Sunday and pass them as startDate and endDate.
-      - if user ask for full detail of event, send all detail of event from api (when ask for detail if event have meeting also send the url link of meeting). `,
-
+      - if user ask for full detail of event, send all detail of event from api (when ask for full detail also send url link of meeting that can click and go to meeting). `,
+      
 
     parameters: {
         type: "OBJECT",
@@ -177,6 +177,7 @@ const systemInstruction = {
         - **FORMAT:CARD:** Use for structured responses like lists or summaries.
         - **FORMAT:TEXT:** Use for simple, conversational replies.
         - **Always start your final response with either \`FORMAT:CARD\` or \`FORMAT:TEXT\`.**
+
         ---
 
         ### **Multi-Turn Conversation Flow (การจัดการบทสนทนาต่อเนื่อง):**
