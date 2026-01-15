@@ -37,24 +37,40 @@ async function getCEMContext(userMessage) {
     const lowerMsg = userMessage.toLowerCase();
     let context = '';
 
-    if (lowerMsg.includes('พนักงาน') || lowerMsg.includes('user') || lowerMsg.includes('คน')) {
+    // พนักงาน
+    if (lowerMsg.includes('พนักงาน') || lowerMsg.includes('user') || lowerMsg.includes('คน') || lowerMsg.includes('ทีม') || lowerMsg.includes('แผนก')) {
         const users = await cemAPI.getUsers();
-        if (users) context += `\n\nข้อมูลพนักงาน (ทั้งหมด ${users.length} คน): ${JSON.stringify(users)}\n`;
+        if (users) context += `\n\n[ข้อมูลพนักงาน - ทั้งหมด ${users.length} คน]\n${JSON.stringify(users)}\n`;
     }
 
-    if (lowerMsg.includes('โครงการ') || lowerMsg.includes('งาน') || lowerMsg.includes('task')) {
+    // โครงการ/งาน
+    if (lowerMsg.includes('โครงการ') || lowerMsg.includes('งาน') || lowerMsg.includes('task') || lowerMsg.includes('project') || lowerMsg.includes('so')) {
         const tasks = await cemAPI.getTasks();
-        if (tasks) context += `\n\nข้อมูลโครงการ (ทั้งหมด ${tasks.length} โครงการ): ${JSON.stringify(tasks)}\n`;
+        if (tasks) context += `\n\n[ข้อมูลโครงการ - ทั้งหมด ${tasks.length} โครงการ]\n${JSON.stringify(tasks)}\n`;
     }
 
-    if (lowerMsg.includes('ลา') || lowerMsg.includes('leave')) {
+    // การลา
+    if (lowerMsg.includes('ลา') || lowerMsg.includes('leave') || lowerMsg.includes('หยุด') || lowerMsg.includes('พักร้อน') || lowerMsg.includes('ลาป่วย')) {
         const leaves = await cemAPI.getLeaveRequests();
-        if (leaves) context += `\n\nข้อมูลการลา (ทั้งหมด ${leaves.length} รายการ): ${JSON.stringify(leaves)}\n`;
+        if (leaves) context += `\n\n[ข้อมูลการลา - ทั้งหมด ${leaves.length} รายการ]\n${JSON.stringify(leaves)}\n`;
     }
 
-    if (lowerMsg.includes('รถ') || lowerMsg.includes('car') || lowerMsg.includes('booking')) {
+    // การจองรถ
+    if (lowerMsg.includes('รถ') || lowerMsg.includes('car') || lowerMsg.includes('booking') || lowerMsg.includes('จอง') || lowerMsg.includes('ยืม')) {
         const bookings = await cemAPI.getCarBookings();
-        if (bookings) context += `\n\nข้อมูลการจองรถ (ทั้งหมด ${bookings.length} รายการ): ${JSON.stringify(bookings)}\n`;
+        if (bookings) context += `\n\n[ข้อมูลการจองรถ - ทั้งหมด ${bookings.length} รายการ]\n${JSON.stringify(bookings)}\n`;
+    }
+
+    // บันทึกการทำงาน/Timesheet
+    if (lowerMsg.includes('timesheet') || lowerMsg.includes('บันทึก') || lowerMsg.includes('ชั่วโมง') || lowerMsg.includes('ทำงาน') || lowerMsg.includes('daily')) {
+        const dailyWork = await cemAPI.getDailyWork();
+        if (dailyWork) context += `\n\n[บันทึกการทำงาน - ทั้งหมด ${dailyWork.length} รายการ]\n${JSON.stringify(dailyWork.slice(0, 50))}\n`;
+    }
+
+    // วันหยุด
+    if (lowerMsg.includes('วันหยุด') || lowerMsg.includes('holiday') || lowerMsg.includes('ปฏิทิน')) {
+        const holidays = await cemAPI.getHolidays();
+        if (holidays) context += `\n\n[วันหยุดราชการ]\n${JSON.stringify(holidays)}\n`;
     }
 
     return context;
@@ -82,14 +98,47 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 
 ---
 
-### **CEM System Integration (ระบบจัดการพนักงาน):**
+### **CEM System Integration (ระบบจัดการพนักงาน GenT-CEM):**
 คุณสามารถเข้าถึงข้อมูลจากระบบ CEM (Company Employee Management) ได้ ซึ่งรวมถึง:
-- **พนักงาน (Users):** รายชื่อ, ตำแหน่ง, แผนก, อีเมล
-- **โครงการ (Tasks):** รายการโครงการ, สถานะ, กำหนดส่ง
-- **การลา (Leave):** ใบลา, ประเภทการลา, สถานะอนุมัติ
-- **การจองรถ (Car Booking):** รายการจองรถ, วันเวลา, สถานะ
 
-เมื่อผู้ใช้ถามเกี่ยวกับข้อมูลเหล่านี้ ข้อมูลจะถูกแนบมาในข้อความ ให้ใช้ข้อมูลนั้นตอบคำถาม
+**1. พนักงาน (Users):**
+- id, username, firstname, lastname, email, phone
+- position (ตำแหน่ง), department (แผนก), employee_id (รหัสพนักงาน)
+- role (admin/user/hr), is_active
+
+**2. โครงการ (Tasks/Projects):**
+- id, task_name (ชื่อโครงการ), so_number (เลข SO), contract_number
+- sale_owner (ผู้ดูแลการขาย), customer_info (ลูกค้า)
+- project_start_date, project_end_date, status, category
+- description, files
+
+**3. บันทึกการทำงาน (Daily Work Records/Timesheet):**
+- id, task_id, step_id, user_id, work_date
+- start_time, end_time, total_hours (ชั่วโมงทำงาน)
+- work_status, location, work_description
+- employee_name, task_name, step_name
+
+**4. การลา (Leave Requests):**
+- id, user_id, user_name, leave_type (ประเภทการลา)
+- start_datetime, end_datetime, total_days
+- reason, status (pending/approved/rejected)
+- has_delegation, delegate_name
+
+**5. การจองรถ (Car Bookings):**
+- id, user_id, name (ผู้จอง), type (ประเภท)
+- location (ปลายทาง), project, selected_date, time
+- license (ทะเบียนรถ), status (pending/active/completed/cancelled)
+- return_date, return_time, fuel_level_borrow, fuel_level_return
+
+**6. วันหยุด (Holidays):**
+- id, name, date
+
+**วิธีตอบคำถาม:**
+- เมื่อผู้ใช้ถามเกี่ยวกับข้อมูลเหล่านี้ ข้อมูลจะถูกแนบมาในข้อความ
+- ให้ใช้ข้อมูลนั้นตอบคำถามอย่างถูกต้องและครบถ้วน
+- ถ้าถามจำนวน ให้นับจากข้อมูลที่ได้รับ
+- ถ้าถามรายละเอียด ให้แสดงข้อมูลที่เกี่ยวข้อง
+- ถ้าข้อมูลไม่เพียงพอ ให้บอกว่าไม่มีข้อมูลในส่วนนั้น
 `
             }]
         };

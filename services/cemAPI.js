@@ -10,9 +10,7 @@ let tokenExpiry = null;
 const cemClient = axios.create({
   baseURL: CEM_API_URL,
   timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  headers: { 'Content-Type': 'application/json' }
 });
 
 async function login() {
@@ -21,9 +19,8 @@ async function login() {
       username: CEM_USERNAME,
       password: CEM_PASSWORD
     });
-    
     authToken = response.data.access_token;
-    tokenExpiry = Date.now() + (2 * 60 * 60 * 1000); // 2 hours
+    tokenExpiry = Date.now() + (2 * 60 * 60 * 1000);
     console.log('✅ CEM API login successful');
     return authToken;
   } catch (error) {
@@ -43,7 +40,6 @@ export async function getCEMData(endpoint) {
   try {
     const token = await getToken();
     if (!token) return null;
-
     const response = await cemClient.get(endpoint, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -59,39 +55,58 @@ export async function getCEMData(endpoint) {
   }
 }
 
+// Users API
 export async function getUsers() {
   return getCEMData('/users');
 }
 
+// Tasks/Projects API
 export async function getTasks() {
   return getCEMData('/tasks');
 }
 
-export async function getLeaveRequests() {
-  return getCEMData('/leave');
+export async function getTaskById(id) {
+  return getCEMData(`/tasks/${id}`);
 }
 
-export async function getCarBookings() {
-  return getCEMData('/car-booking');
+// Task Steps API
+export async function getTaskSteps(taskId) {
+  return getCEMData(`/task-steps/task/${taskId}`);
 }
 
+// Daily Work Records API
 export async function getDailyWork(params = {}) {
   const query = new URLSearchParams(params).toString();
   return getCEMData(`/daily-work${query ? '?' + query : ''}`);
 }
 
-export async function searchCEMData(query) {
-  const [users, tasks, leaves, bookings] = await Promise.all([
-    getUsers(),
-    getTasks(),
-    getLeaveRequests(),
-    getCarBookings()
-  ]);
+// Leave API
+export async function getLeaveRequests() {
+  return getCEMData('/leave');
+}
 
-  return {
-    users: users || [],
-    tasks: tasks || [],
-    leaves: leaves || [],
-    bookings: bookings || []
-  };
+export async function getLeaveTypes() {
+  return getCEMData('/leave/leave-types');
+}
+
+export async function getLeaveQuota(userId) {
+  return getCEMData(`/leave/quota/${userId}`);
+}
+
+export async function getHolidays() {
+  return getCEMData('/leave/holidays');
+}
+
+// Car Booking API
+export async function getCarBookings() {
+  return getCEMData('/car-booking');
+}
+
+// Settings API
+export async function getCategories() {
+  return getCEMData('/settings/categories');
+}
+
+export async function getStatuses() {
+  return getCEMData('/settings/statuses');
 }
