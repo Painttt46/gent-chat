@@ -9,8 +9,8 @@ services:
     environment:
       - NODE_ENV=production
       - TZ=Asia/Bangkok
-      - GEMINI_API_KEY=AIzaSyACSILpwM7sknGu_na1noIezmxpXqN01x0
-      - GEMINI_API_KEY_2=AIzaSyA9J2yR7K7_ob1yIvtYQWFWeHO9KFIj-4k
+      - GEMINI_API_KEY=AIzaSyC0a0lwY2mjXYVMBrfLsMUrK094xeUQTgo
+      - GEMINI_API_KEY_2=AIzaSyA5C4CcfYo1jkKwZiWKzL4yDu4bXkNpMWs
       - MONGODB_URI=mongodb+srv://paint:2546paint@cluster0.nmil3pa.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
       - CEM_API_URL=http://172.30.101.52:3001/api
       - CEM_USERNAME=weraprat@gent-s.com
