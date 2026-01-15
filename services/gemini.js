@@ -13,7 +13,7 @@ function getGenAI(apiKey) {
     return genAICache.get(apiKey);
 }
 
-async function withTimeout(promise, timeoutMs = 30000) {
+async function withTimeout(promise, timeoutMs = 120000) {
     return Promise.race([
         promise,
         new Promise((_, reject) => 
