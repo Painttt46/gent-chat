@@ -6,22 +6,33 @@ dotenv.config({ path: '.env.local' });
 
 const PORT = process.env.PORT || 3000;
 
+// Helper to add Express-like methods to response
+function enhanceResponse(res) {
+  res.status = (code) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (data) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(data));
+  };
+  return res;
+}
+
 const server = http.createServer(async (req, res) => {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Content-Type', 'application/json');
+
+  enhanceResponse(res);
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
+    res.status(200).end();
     return;
   }
 
   if (req.url === '/health') {
-    res.writeHead(200);
-    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
     return;
   }
 
@@ -34,15 +45,13 @@ const server = http.createServer(async (req, res) => {
         await webhookHandler(req, res);
       } catch (error) {
         console.error('Webhook error:', error);
-        res.writeHead(500);
-        res.end(JSON.stringify({ error: 'Internal server error' }));
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
     return;
   }
 
-  res.writeHead(404);
-  res.end(JSON.stringify({ error: 'Not found' }));
+  res.status(404).json({ error: 'Not found' });
 });
 
 server.listen(PORT, () => {
