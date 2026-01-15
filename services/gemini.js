@@ -151,7 +151,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 
         const result = await withTimeout(
             model.generateContent({ contents: history }),
-            30000
+            120000
         );
         return result.response;
     }, 2);
