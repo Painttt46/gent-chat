@@ -39,22 +39,22 @@ async function getCEMContext(userMessage) {
 
     if (lowerMsg.includes('พนักงาน') || lowerMsg.includes('user') || lowerMsg.includes('คน')) {
         const users = await cemAPI.getUsers();
-        if (users) context += `\n\nข้อมูลพนักงาน: ${JSON.stringify(users.slice(0, 10))}\n`;
+        if (users) context += `\n\nข้อมูลพนักงาน (ทั้งหมด ${users.length} คน): ${JSON.stringify(users)}\n`;
     }
 
     if (lowerMsg.includes('โครงการ') || lowerMsg.includes('งาน') || lowerMsg.includes('task')) {
         const tasks = await cemAPI.getTasks();
-        if (tasks) context += `\n\nข้อมูลโครงการ: ${JSON.stringify(tasks.slice(0, 10))}\n`;
+        if (tasks) context += `\n\nข้อมูลโครงการ (ทั้งหมด ${tasks.length} โครงการ): ${JSON.stringify(tasks)}\n`;
     }
 
     if (lowerMsg.includes('ลา') || lowerMsg.includes('leave')) {
         const leaves = await cemAPI.getLeaveRequests();
-        if (leaves) context += `\n\nข้อมูลการลา: ${JSON.stringify(leaves.slice(0, 10))}\n`;
+        if (leaves) context += `\n\nข้อมูลการลา (ทั้งหมด ${leaves.length} รายการ): ${JSON.stringify(leaves)}\n`;
     }
 
     if (lowerMsg.includes('รถ') || lowerMsg.includes('car') || lowerMsg.includes('booking')) {
         const bookings = await cemAPI.getCarBookings();
-        if (bookings) context += `\n\nข้อมูลการจองรถ: ${JSON.stringify(bookings.slice(0, 10))}\n`;
+        if (bookings) context += `\n\nข้อมูลการจองรถ (ทั้งหมด ${bookings.length} รายการ): ${JSON.stringify(bookings)}\n`;
     }
 
     return context;
