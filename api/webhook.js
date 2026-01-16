@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   try {
     stateService.checkDailyReset();
     const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
-    let currentModel = stateService.userModels.get(userId) || 'gemini-3-flash';
+    let currentModel = stateService.userModels.get(userId) || 'gemini-3-flash-preview';
 
     let cleanText = (req.body?.text || '').replace(/<at>.*?<\/at>/g, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 

@@ -2,13 +2,18 @@ export const conversations = new Map();
 
 // Model tracking with limits
 export const models = {
-    // กลุ่ม Gemini (โควต้าน้อย 20/วัน)
-    'gemini-3-flash': { name: 'Gemini 3 Flash', count: 0, limit: 20 },
-    'gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash Lite', count: 0, limit: 20 },
-    'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0, limit: 20 },
+    // Gemini 3 (Preview)
+    'gemini-3-flash-preview': { name: 'Gemini 3 Flash Preview', count: 0, limit: 20 },
+    'gemini-3-pro-preview': { name: 'Gemini 3 Pro Preview', count: 0, limit: 20 },
 
-    // กลุ่ม Gemma (โควต้าเยอะ 14,400/วัน) *แนะนำตัวนี้*
-    'gemma-3-27b-it': { name: 'Gemma 3 27B IT', count: 0, limit: 14400 }
+    // Gemini 2.5
+    'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0, limit: 20 },
+    'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0, limit: 20 },
+    'gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash Lite', count: 0, limit: 20 },
+
+    // Gemini 2.0
+    'gemini-2.0-flash': { name: 'Gemini 2.0 Flash', count: 0, limit: 20 },
+    'gemini-2.0-flash-lite': { name: 'Gemini 2.0 Flash Lite', count: 0, limit: 20 }
 };
 export const userModels = new Map(); // Track current model per user
 let lastResetDate = new Date().toDateString();
