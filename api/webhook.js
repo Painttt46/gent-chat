@@ -168,6 +168,7 @@ export default async function handler(req, res) {
     const switchNote = switched ? ` | ⚡ Auto-switched` : '';
     const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${modelInfo.name} | ${modelInfo.count}/${modelInfo.limit}${switchNote}`;
     console.log(`📈 usageStats: ${usageStats}`);
+    console.log(`🎴 isCardFormat: ${isCardFormat}`);
 
     if (isBroadcastCommand) {
       await teamsService.sendToTeamsWebhook(`🔊 **Announcement:**\n\n${cleanResponse}\n\n${usageStats}`);
@@ -175,6 +176,7 @@ export default async function handler(req, res) {
     }
 
     if (isCardFormat) {
+      console.log(`📤 Sending card response...`);
       return res.status(200).json({
         type: "message",
         attachments: [{
@@ -190,7 +192,7 @@ export default async function handler(req, res) {
         }]
       });
     } else {
-      console.log(`📤 Sending response: ${cleanResponse.substring(0, 100)}...`);
+      console.log(`📤 Sending text response...`);
       return res.status(200).json({ text: `🤖 **Gent:** ${cleanResponse}\n\n${usageStats}` });
     }
 
