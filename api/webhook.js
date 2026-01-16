@@ -91,6 +91,7 @@ export default async function handler(req, res) {
 
     let text;
     const functionCalls = geminiResponse.functionCalls();
+    console.log(`🔧 Function calls: ${functionCalls?.length || 0}`, functionCalls ? JSON.stringify(functionCalls[0]?.name) : 'none');
     
     // สำหรับ Gemini 3: save rawContent ทั้งก้อนเพื่อรักษา thought signatures
     const isGemini3 = currentModel.includes('gemini-3');
@@ -131,6 +132,8 @@ export default async function handler(req, res) {
     } else {
       text = geminiResponse.text();
     }
+
+    console.log(`📝 Response text length: ${text?.length || 0}`);
 
     const isCardFormat = text.startsWith('FORMAT:CARD');
     let cleanResponse = text.replace(/FORMAT:(CARD|TEXT)/, '').trim() || "I'm sorry, I couldn't generate a proper response.";
