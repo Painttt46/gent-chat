@@ -192,7 +192,9 @@ export async function getGeminiResponse(apiKey, modelName, history) {
             console.log(`📥 Gemini 3 response status: ${response.status}`);
             if (data.error) {
                 console.error(`❌ Gemini 3 error:`, data.error);
-                throw new Error(`Gemini API Error: ${data.error.message}`);
+                const err = new Error(`Gemini API Error: ${data.error.message}`);
+                err.status = data.error.code;
+                throw err;
             }
             
             // ดึง content ดิบออกมาทั้งก้อน (รวม thought + functionCall)

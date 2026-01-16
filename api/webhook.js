@@ -10,20 +10,31 @@ async function callGeminiWithFallback(apiKey, model, history, userId) {
   const modelKeys = Object.keys(stateService.models);
   let currentModelIndex = modelKeys.indexOf(model);
   let lastError;
+  let currentKey = apiKey;
 
-  for (let i = 0; i < modelKeys.length; i++) {
-    const tryModel = modelKeys[(currentModelIndex + i) % modelKeys.length];
-    try {
-      const response = await geminiService.getGeminiResponse(apiKey, tryModel, history);
-      if (i > 0) stateService.userModels.set(userId, tryModel); // switched model
-      return { response, model: tryModel, switched: i > 0 };
-    } catch (err) {
-      lastError = err;
-      if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) {
-        console.log(`⚠️ ${tryModel} quota exceeded, trying next model...`);
-        continue;
+  // Try with current key first, then switch key if all models fail
+  for (let keyAttempt = 0; keyAttempt < 2; keyAttempt++) {
+    for (let i = 0; i < modelKeys.length; i++) {
+      const tryModel = modelKeys[(currentModelIndex + i) % modelKeys.length];
+      try {
+        const response = await geminiService.getGeminiResponse(currentKey, tryModel, history);
+        if (i > 0 || keyAttempt > 0) stateService.userModels.set(userId, tryModel);
+        return { response, model: tryModel, switched: i > 0 || keyAttempt > 0 };
+      } catch (err) {
+        lastError = err;
+        if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) {
+          console.log(`⚠️ ${tryModel} quota exceeded, trying next model...`);
+          continue;
+        }
+        throw err;
       }
-      throw err;
+    }
+    // All models failed with current key, try switching key
+    if (keyAttempt === 0 && process.env.GEMINI_API_KEY_2) {
+      console.log(`🔄 All models quota exceeded, switching API key...`);
+      stateService.currentApiKeyIndex = stateService.currentApiKeyIndex === 0 ? 1 : 0;
+      currentKey = stateService.getCurrentApiKey();
+      Object.keys(stateService.models).forEach(k => stateService.models[k].count = 0);
     }
   }
   throw lastError;
@@ -38,7 +49,7 @@ export default async function handler(req, res) {
     stateService.checkDailyReset();
     const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
     const userName = req.body?.from?.name || '';
-    let currentModel = stateService.userModels.get(userId) || 'gemini-2.5-flash';
+    let currentModel = stateService.userModels.get(userId) || 'gemini-3-flash-preview';
 
     let cleanText = (req.body?.text || '').replace(/<at>.*?<\/at>/g, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 
