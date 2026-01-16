@@ -37,9 +37,15 @@ export default async function handler(req, res) {
   try {
     stateService.checkDailyReset();
     const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
+    const userName = req.body?.from?.name || '';
     let currentModel = stateService.userModels.get(userId) || 'gemini-2.5-flash';
 
     let cleanText = (req.body?.text || '').replace(/<at>.*?<\/at>/g, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+
+    // เพิ่ม user context ถ้ามี และข้อความพูดถึง "ฉัน" หรือ "ของฉัน"
+    if (userName && (cleanText.includes('ฉัน') || cleanText.includes('ของฉัน') || cleanText.includes('ผม') || cleanText.includes('ของผม'))) {
+      cleanText = cleanText + ` [ผู้ถามคือ: ${userName}]`;
+    }
 
     if (cleanText.toLowerCase() === 'clear') {
       stateService.conversations.delete(userId);
