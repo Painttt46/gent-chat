@@ -128,7 +128,9 @@ export default async function handler(req, res) {
       const { response: finalResponse } = await callGeminiWithFallback(
         stateService.getCurrentApiKey(), currentModel, historyWithFunction, userId
       );
+      console.log(`🔍 finalResponse type: ${typeof finalResponse}, keys: ${Object.keys(finalResponse || {})}`);
       text = finalResponse.text();
+      console.log(`📝 After function call text: ${text?.substring(0, 100)}`);
     } else {
       text = geminiResponse.text();
     }
