@@ -172,6 +172,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
         
         // Gemini 3 ต้องใช้ REST API โดยตรงเพราะ SDK ยังไม่รองรับ thought signatures
         if (isGemini3) {
+            console.log(`🔄 Using REST API for ${modelName}`);
             const response = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
                 {
@@ -188,10 +189,15 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                 }
             );
             const data = await response.json();
-            if (data.error) throw new Error(`Gemini API Error: ${data.error.message}`);
+            console.log(`📥 Gemini 3 response status: ${response.status}`);
+            if (data.error) {
+                console.error(`❌ Gemini 3 error:`, data.error);
+                throw new Error(`Gemini API Error: ${data.error.message}`);
+            }
             
             // ดึง content ดิบออกมาทั้งก้อน (รวม thought + functionCall)
             const rawContent = data.candidates?.[0]?.content;
+            console.log(`✅ Gemini 3 response received, parts: ${rawContent?.parts?.length || 0}`);
             
             return {
                 // ส่ง response ตัวเต็มกลับไป (เพื่อให้ save history ได้ครบ)
