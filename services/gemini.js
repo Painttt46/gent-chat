@@ -151,10 +151,10 @@ export async function getGeminiResponse(apiKey, modelName, history) {
             systemInstruction: cemSystemInstruction
         };
 
-        // Gemini 3 ต้องเปิด thought signatures
+        // Gemini 3 ต้องเปิด thinking config สำหรับ function calling
         if (isGemini3) {
             modelConfig.generationConfig = {
-                thinking: { includeThoughts: true }
+                thinkingConfig: { thinkingBudget: 1024 }
             };
         }
 
