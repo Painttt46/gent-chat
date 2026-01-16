@@ -143,11 +143,22 @@ export async function getGeminiResponse(apiKey, modelName, history) {
             }]
         };
 
-        const model = genAI.getGenerativeModel({
+        const isGemini3 = modelName.includes('gemini-3');
+        
+        const modelConfig = {
             model: modelName,
             tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
             systemInstruction: cemSystemInstruction
-        });
+        };
+
+        // Gemini 3 ต้องเปิด thought signatures
+        if (isGemini3) {
+            modelConfig.generationConfig = {
+                thinking: { includeThoughts: true }
+            };
+        }
+
+        const model = genAI.getGenerativeModel(modelConfig);
 
         const result = await withTimeout(
             model.generateContent({ contents: history }),
