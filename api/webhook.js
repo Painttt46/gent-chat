@@ -5,6 +5,30 @@ import * as graphService from '../services/graphAPI.js';
 import * as teamsService from '../services/teams.js';
 import * as geminiService from '../services/gemini.js';
 
+// Try calling Gemini with auto model switch on quota error
+async function callGeminiWithFallback(apiKey, model, history, userId) {
+  const modelKeys = Object.keys(stateService.models);
+  let currentModelIndex = modelKeys.indexOf(model);
+  let lastError;
+
+  for (let i = 0; i < modelKeys.length; i++) {
+    const tryModel = modelKeys[(currentModelIndex + i) % modelKeys.length];
+    try {
+      const response = await geminiService.getGeminiResponse(apiKey, tryModel, history);
+      if (i > 0) stateService.userModels.set(userId, tryModel); // switched model
+      return { response, model: tryModel, switched: i > 0 };
+    } catch (err) {
+      lastError = err;
+      if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) {
+        console.log(`⚠️ ${tryModel} quota exceeded, trying next model...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -13,21 +37,20 @@ export default async function handler(req, res) {
   try {
     stateService.checkDailyReset();
     const userId = req.body?.from?.id || req.body?.channelData?.tenant?.id || 'default';
-    const currentModel = stateService.userModels.get(userId) || 'gemini-2.5-flash';
-    const limitStatus = stateService.checkLimitsAndSwitchKey(currentModel);
-
-    if (limitStatus === 'MAXED_OUT') {
-      return res.status(200).json({
-        text: `⚠️ **Daily quota exceeded!** Please try again tomorrow.`
-      });
-    }
-    stateService.models[currentModel].count++;
+    let currentModel = stateService.userModels.get(userId) || 'gemini-3-flash';
 
     let cleanText = (req.body?.text || '').replace(/<at>.*?<\/at>/g, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
 
     if (cleanText.toLowerCase() === 'clear') {
       stateService.conversations.delete(userId);
       return res.status(200).json({ text: "🔄 Conversation cleared!" });
+    }
+
+    if (cleanText.toLowerCase() === 'model') {
+      const modelList = Object.entries(stateService.models).map(([key, model]) => 
+        `${key === currentModel ? '✅' : '•'} ${key}: ${model.name} (${model.count}/${model.limit})`
+      ).join('\n');
+      return res.status(200).json({ text: `🤖 **Available Models:**\n${modelList}` });
     }
 
     if (cleanText.toLowerCase().startsWith('model ')) {
@@ -54,14 +77,17 @@ export default async function handler(req, res) {
     const history = stateService.conversations.get(userId);
     const conversationHistory = [...history, { role: "user", parts: [{ text: finalText }] }];
 
-    let geminiResponse = await geminiService.getGeminiResponse(stateService.getCurrentApiKey(), currentModel, conversationHistory);
-    let text;
+    const { response: geminiResponse, model: usedModel, switched } = await callGeminiWithFallback(
+      stateService.getCurrentApiKey(), currentModel, conversationHistory, userId
+    );
+    currentModel = usedModel;
+    stateService.models[currentModel].count++;
 
+    let text;
     const functionCalls = geminiResponse.functionCalls();
     if (functionCalls && functionCalls.length > 0) {
       const call = functionCalls[0];
       let functionResult;
-      let historyWithFunction;
 
       switch (call.name) {
         case "get_user_calendar":
@@ -77,15 +103,16 @@ export default async function handler(req, res) {
           functionResult = { error: "Unknown function called." };
       }
 
-      historyWithFunction = [
+      const historyWithFunction = [
         ...conversationHistory,
         { role: "model", parts: [{ functionCall: call }] },
         { role: "function", parts: [{ functionResponse: { name: call.name, response: functionResult } }] }
       ];
 
-      const finalGeminiResponse = await geminiService.getGeminiResponse(stateService.getCurrentApiKey(), currentModel, historyWithFunction);
-      text = finalGeminiResponse.text();
-
+      const { response: finalResponse } = await callGeminiWithFallback(
+        stateService.getCurrentApiKey(), currentModel, historyWithFunction, userId
+      );
+      text = finalResponse.text();
     } else {
       text = geminiResponse.text();
     }
@@ -95,11 +122,10 @@ export default async function handler(req, res) {
 
     history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
-    if (history.length > 40) {
-      history.splice(0, 2);
-    }
+    if (history.length > 40) history.splice(0, 2);
 
-    const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${stateService.models[currentModel].name} | ${stateService.models[currentModel].count}/${stateService.models[currentModel].limit} reqs | API ${stateService.currentApiKeyIndex + 1}/2`;
+    const switchNote = switched ? ` | ⚡ Auto-switched` : '';
+    const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${stateService.models[currentModel].name} | ${stateService.models[currentModel].count}/${stateService.models[currentModel].limit}${switchNote}`;
 
     if (isBroadcastCommand) {
       await teamsService.sendToTeamsWebhook(`🔊 **Announcement:**\n\n${cleanResponse}\n\n${usageStats}`);
@@ -127,10 +153,14 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Handler Error:', error);
-    const errorMsg = error.message === 'Request timeout' 
-      ? '⏱️ Request timeout. Please try again.' 
-      : `❌ **Gent Error:** ${error.message}`;
+    let errorMsg;
+    if (error.message === 'Request timeout') {
+      errorMsg = '⏱️ Request timeout. Please try again.';
+    } else if (error.status === 429 || error.message?.includes('quota')) {
+      errorMsg = '⚠️ All models quota exceeded! Please try again tomorrow or type `model` to check status.';
+    } else {
+      errorMsg = `❌ **Gent Error:** ${error.message}`;
+    }
     res.status(500).json({ text: errorMsg });
   }
-
 }
