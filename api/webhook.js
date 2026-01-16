@@ -166,6 +166,7 @@ export default async function handler(req, res) {
         }]
       });
     } else {
+      console.log(`📤 Sending response: ${cleanResponse.substring(0, 100)}...`);
       return res.status(200).json({ text: `🤖 **Gent:** ${cleanResponse}\n\n${usageStats}` });
     }
 
