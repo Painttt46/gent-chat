@@ -134,9 +134,15 @@ export default async function handler(req, res) {
     }
 
     console.log(`📝 Response text length: ${text?.length || 0}`);
+    
+    if (!text) {
+      console.log('⚠️ Empty text response');
+      return res.status(200).json({ text: '❌ ไม่ได้รับการตอบกลับจาก AI' });
+    }
 
     const isCardFormat = text.startsWith('FORMAT:CARD');
     let cleanResponse = text.replace(/FORMAT:(CARD|TEXT)/, '').trim() || "I'm sorry, I couldn't generate a proper response.";
+    console.log(`🧹 Clean response length: ${cleanResponse.length}`);
 
     history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
