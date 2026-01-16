@@ -4,6 +4,7 @@ import * as stateService from '../services/state.js';
 import * as graphService from '../services/graphAPI.js';
 import * as teamsService from '../services/teams.js';
 import * as geminiService from '../services/gemini.js';
+import * as cemAPI from '../services/cemAPI.js';
 
 // Try calling Gemini with auto model switch on quota error
 async function callGeminiWithFallback(apiKey, model, history, userId) {
@@ -119,6 +120,30 @@ export default async function handler(req, res) {
           break;
         case "create_calendar_event":
           functionResult = await graphService.createCalendarEvent(call.args);
+          break;
+        case "read_project_file":
+          const task = await cemAPI.getTaskById(call.args.taskId);
+          if (!task || !task.files?.length) {
+            functionResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
+          } else {
+            const fileIndex = call.args.fileIndex || 0;
+            const filename = task.files[fileIndex];
+            if (!filename) {
+              functionResult = { error: `ไม่พบไฟล์ลำดับที่ ${fileIndex}`, availableFiles: task.files };
+            } else {
+              const fileData = await cemAPI.downloadFile(filename);
+              if (!fileData) {
+                functionResult = { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
+              } else {
+                // ส่ง file content กลับให้ Gemini อ่าน
+                functionResult = { 
+                  filename, 
+                  taskName: task.task_name,
+                  fileContent: { inlineData: { mimeType: fileData.mimeType, data: fileData.base64 } }
+                };
+              }
+            }
+          }
           break;
         default:
           functionResult = { error: "Unknown function called." };

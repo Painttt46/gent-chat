@@ -110,3 +110,21 @@ export async function getCategories() {
 export async function getStatuses() {
   return getCEMData('/settings/statuses');
 }
+
+// File download - returns base64
+export async function downloadFile(filename) {
+  try {
+    const encodedFilename = encodeURIComponent(filename);
+    const url = `${CEM_API_URL.replace('/api', '')}/uploads/${encodedFilename}`;
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000 });
+    const base64 = Buffer.from(response.data).toString('base64');
+    const mimeType = filename.endsWith('.pdf') ? 'application/pdf' 
+      : filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? 'image/jpeg'
+      : filename.endsWith('.png') ? 'image/png' : 'application/octet-stream';
+    console.log(`✅ Downloaded file: ${filename} (${Math.round(response.data.length/1024)}KB)`);
+    return { base64, mimeType, size: response.data.length };
+  } catch (error) {
+    console.error(`❌ File download error:`, error.message);
+    return null;
+  }
+}

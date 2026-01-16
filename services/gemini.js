@@ -13,6 +13,20 @@ function getGenAI(apiKey) {
     return genAICache.get(apiKey);
 }
 
+// Function declaration สำหรับอ่านไฟล์โครงการ
+const readProjectFileFunction = {
+    name: "read_project_file",
+    description: "อ่านไฟล์เอกสารที่แนบกับโครงการ เช่น สัญญา ใบสั่งซื้อ เอกสารโครงการ รองรับ PDF และรูปภาพ",
+    parameters: {
+        type: "object",
+        properties: {
+            taskId: { type: "number", description: "ID ของโครงการที่ต้องการดูไฟล์" },
+            fileIndex: { type: "number", description: "ลำดับไฟล์ที่ต้องการอ่าน (เริ่มจาก 0) ถ้าไม่ระบุจะอ่านไฟล์แรก" }
+        },
+        required: ["taskId"]
+    }
+};
+
 async function withTimeout(promise, timeoutMs = 120000) {
     return Promise.race([
         promise,
@@ -180,7 +194,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: history,
-                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
+                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, readProjectFileFunction] }],
                         systemInstruction: cemSystemInstruction,
                         generationConfig: {
                             thinkingConfig: { thinkingBudget: 2048 }
@@ -211,7 +225,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 
         const modelConfig = {
             model: modelName,
-            tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
+            tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, readProjectFileFunction] }],
             systemInstruction: cemSystemInstruction
         };
 

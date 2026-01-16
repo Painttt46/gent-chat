@@ -4,16 +4,10 @@ export const conversations = new Map();
 export const models = {
     // Gemini 3 (Preview - ใช้ REST API with thinkingConfig)
     'gemini-3-flash-preview': { name: 'Gemini 3 Flash Preview', count: 0, limit: 20 },
-    'gemini-3-pro-preview': { name: 'Gemini 3 Pro Preview', count: 0, limit: 20 },
 
     // Gemini 2.5 (รองรับ function calling)
     'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0, limit: 20 },
-    'gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash Lite', count: 0, limit: 20 },
-    'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0, limit: 20 },
-
-    // Gemini 2.0
-    'gemini-2.0-flash': { name: 'Gemini 2.0 Flash', count: 0, limit: 20 },
-    'gemini-2.0-flash-lite': { name: 'Gemini 2.0 Flash Lite', count: 0, limit: 20 }
+    'gemini-2.5-flash-lite': { name: 'Gemini 2.5 Flash Lite', count: 0, limit: 20 }
 };
 export const userModels = new Map(); // Track current model per user
 let lastResetDate = new Date().toDateString();
