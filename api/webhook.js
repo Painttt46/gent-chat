@@ -32,9 +32,8 @@ async function callGeminiWithFallback(apiKey, model, history, userId) {
     // All models failed with current key, try switching key
     if (keyAttempt === 0 && process.env.GEMINI_API_KEY_2) {
       console.log(`🔄 All models quota exceeded, switching API key...`);
-      stateService.currentApiKeyIndex = stateService.currentApiKeyIndex === 0 ? 1 : 0;
+      stateService.switchApiKey();
       currentKey = stateService.getCurrentApiKey();
-      Object.keys(stateService.models).forEach(k => stateService.models[k].count = 0);
     }
   }
   throw lastError;

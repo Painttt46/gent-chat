@@ -24,6 +24,13 @@ export function getCurrentApiKey() {
     return currentApiKeyIndex === 0 ? process.env.GEMINI_API_KEY : process.env.GEMINI_API_KEY_2;
 }
 
+// Switch to other API key
+export function switchApiKey() {
+    currentApiKeyIndex = currentApiKeyIndex === 0 ? 1 : 0;
+    Object.keys(models).forEach(key => models[key].count = 0);
+    console.log(`🔑 Switched to API key ${currentApiKeyIndex + 1}`);
+}
+
 // Check if model hit limit and switch API key if needed
 export function checkLimitsAndSwitchKey(modelKey) {
     const model = models[modelKey];
