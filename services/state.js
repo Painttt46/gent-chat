@@ -3,7 +3,8 @@ export const conversations = new Map();
 // Model tracking with limits
 export const models = {
     'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', count: 0, limit: 500 },
-    'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', count: 0, limit: 100 }
+    'gemini-3-flash': { name: 'Gemini 3 Flash', count: 0, limit: 1500 },
+    'gemini-1.5-flash': { name: 'Gemini 1.5 Flash', count: 0, limit: 1500 }
 };
 export const userModels = new Map(); // Track current model per user
 let lastResetDate = new Date().toDateString();
