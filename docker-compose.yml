@@ -15,7 +15,7 @@ services:
       - CEM_USERNAME=weraprat@gent-s.com
       - CEM_PASSWORD=2546paint
       - AZURE_CLIENT_ID=997e1b06-042a-45e6-b2bc-a42957c57228
-      - AZURE_CLIENT_SECRET=kN58Q~c~hIRuX_FlqVn-2fY.L~0-WaaK22_YQdcM
+      - AZURE_CLIENT_SECRET=
       - AZURE_TENANT_ID=c5fc1b2a-2ce8-4471-ab9d-be65d8fe0906
       - PORT=3002
     restart: unless-stopped
