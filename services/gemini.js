@@ -168,20 +168,44 @@ export async function getGeminiResponse(apiKey, modelName, history) {
             }]
         };
 
-        const isGemini3 = modelName.includes('gemini-3');
+        const isGemini3 = modelName.includes('gemini-3') || modelName.includes('thinking');
         
+        // Gemini 3 ต้องใช้ REST API โดยตรงเพราะ SDK ยังไม่รองรับ thought signatures
+        if (isGemini3) {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: history,
+                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
+                        systemInstruction: cemSystemInstruction,
+                        generationConfig: {
+                            thinkingConfig: { thinkingBudget: 2048 }
+                        }
+                    })
+                }
+            );
+            const data = await response.json();
+            if (data.error) throw new Error(`Gemini API Error: ${data.error.message}`);
+            
+            // ดึง content ดิบออกมาทั้งก้อน (รวม thought + functionCall)
+            const rawContent = data.candidates?.[0]?.content;
+            
+            return {
+                // ส่ง response ตัวเต็มกลับไป (เพื่อให้ save history ได้ครบ)
+                rawContent,
+                text: () => rawContent?.parts?.find(p => p.text)?.text || '',
+                functionCalls: () => rawContent?.parts?.filter(p => p.functionCall).map(p => p.functionCall) || null
+            };
+        }
+
         const modelConfig = {
             model: modelName,
             tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction] }],
             systemInstruction: cemSystemInstruction
         };
-
-        // Gemini 3 ต้องเปิด thinking config สำหรับ function calling
-        if (isGemini3) {
-            modelConfig.generationConfig = {
-                thinkingConfig: { thinkingBudget: 1024 }
-            };
-        }
 
         const model = genAI.getGenerativeModel(modelConfig);
 

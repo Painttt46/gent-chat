@@ -91,6 +91,10 @@ export default async function handler(req, res) {
 
     let text;
     const functionCalls = geminiResponse.functionCalls();
+    
+    // สำหรับ Gemini 3: save rawContent ทั้งก้อนเพื่อรักษา thought signatures
+    const isGemini3 = currentModel.includes('gemini-3');
+    
     if (functionCalls && functionCalls.length > 0) {
       const call = functionCalls[0];
       let functionResult;
@@ -109,9 +113,14 @@ export default async function handler(req, res) {
           functionResult = { error: "Unknown function called." };
       }
 
+      // สำหรับ Gemini 3: ใช้ rawContent ทั้งก้อน
+      const modelPart = isGemini3 && geminiResponse.rawContent 
+        ? geminiResponse.rawContent 
+        : { role: "model", parts: [{ functionCall: call }] };
+
       const historyWithFunction = [
         ...conversationHistory,
-        { role: "model", parts: [{ functionCall: call }] },
+        modelPart,
         { role: "function", parts: [{ functionResponse: { name: call.name, response: functionResult } }] }
       ];
 
