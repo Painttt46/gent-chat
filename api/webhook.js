@@ -155,13 +155,15 @@ export default async function handler(req, res) {
     const isCardFormat = text.startsWith('FORMAT:CARD');
     let cleanResponse = text.replace(/FORMAT:(CARD|TEXT)/, '').trim() || "I'm sorry, I couldn't generate a proper response.";
     console.log(`🧹 Clean response length: ${cleanResponse.length}`);
+    console.log(`📊 currentModel: ${currentModel}, exists: ${!!stateService.models[currentModel]}`);
 
     history.push({ role: "user", parts: [{ text: finalText }] });
     history.push({ role: "model", parts: [{ text: cleanResponse }] });
     if (history.length > 40) history.splice(0, 2);
 
+    const modelInfo = stateService.models[currentModel] || { name: currentModel, count: 0, limit: 20 };
     const switchNote = switched ? ` | ⚡ Auto-switched` : '';
-    const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${stateService.models[currentModel].name} | ${stateService.models[currentModel].count}/${stateService.models[currentModel].limit}${switchNote}`;
+    const usageStats = `💬 ${Math.floor(history.length / 2)} msgs | ${modelInfo.name} | ${modelInfo.count}/${modelInfo.limit}${switchNote}`;
 
     if (isBroadcastCommand) {
       await teamsService.sendToTeamsWebhook(`🔊 **Announcement:**\n\n${cleanResponse}\n\n${usageStats}`);
