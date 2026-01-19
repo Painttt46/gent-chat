@@ -216,7 +216,14 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: history,
+                        contents: history.map(msg => ({
+                            role: msg.role,
+                            parts: msg.parts?.map(p => {
+                                if (p.functionCall) return { functionCall: { name: p.functionCall.name, args: p.functionCall.args } };
+                                if (p.functionResponse) return { functionResponse: { name: p.functionResponse.name, response: p.functionResponse.response } };
+                                return p;
+                            })
+                        })),
                         tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
                         systemInstruction: cemSystemInstruction,
                         generationConfig: {
