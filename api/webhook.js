@@ -239,6 +239,16 @@ export default async function handler(req, res) {
           case "create_calendar_event":
             loopResult = await graphService.createCalendarEvent(loopCall.args);
             break;
+          case "read_project_file":
+            const loopTask = await cemAPI.getTaskById(loopCall.args.taskId);
+            if (!loopTask?.files?.length) {
+              loopResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
+            } else {
+              const loopFilename = loopTask.files[loopCall.args.fileIndex || 0];
+              const loopFileData = await cemAPI.downloadFile(loopFilename, loopCall.args.startPage || 1, loopCall.args.endPage);
+              loopResult = loopFileData ? { filename: loopFilename, totalPages: loopFileData.pageCount, pagesRead: `${loopFileData.startPage}-${loopFileData.endPage}` } : { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
+            }
+            break;
           case "get_daily_work_records":
             loopResult = await cemAPI.getDailyWork(loopCall.args || {});
             break;
