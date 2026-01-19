@@ -241,12 +241,13 @@ export default async function handler(req, res) {
             break;
           case "read_project_file":
             const loopTask = await cemAPI.getTaskById(loopCall.args.taskId);
+            let loopFileData = null;
             if (!loopTask?.files?.length) {
               loopResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
             } else {
               const loopFilename = loopTask.files[loopCall.args.fileIndex || 0];
-              const loopFileData = await cemAPI.downloadFile(loopFilename, loopCall.args.startPage || 1, loopCall.args.endPage);
-              loopResult = loopFileData ? { filename: loopFilename, totalPages: loopFileData.pageCount, pagesRead: `${loopFileData.startPage}-${loopFileData.endPage}` } : { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
+              loopFileData = await cemAPI.downloadFile(loopFilename, loopCall.args.startPage || 1, loopCall.args.endPage);
+              loopResult = loopFileData ? { filename: loopFilename, totalPages: loopFileData.pageCount, pagesRead: `${loopFileData.startPage}-${loopFileData.endPage}`, _fileData: loopFileData } : { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
             }
             break;
           case "get_daily_work_records":
@@ -272,11 +273,18 @@ export default async function handler(req, res) {
           ? loopResponse.rawContent 
           : { role: "model", parts: [{ functionCall: loopCall }] };
         
-        currentHistory = [
-          ...currentHistory,
-          loopModelPart,
-          makeFunctionResponse(loopCall.name, loopResult, loopIsGemini3)
-        ];
+        const loopFunctionMsg = makeFunctionResponse(loopCall.name, { ...loopResult, _fileData: undefined }, loopIsGemini3);
+        currentHistory = [...currentHistory, loopModelPart, loopFunctionMsg];
+        
+        // ส่งไฟล์ถ้ามี
+        if (loopResult._fileData?.allPages) {
+          const loopPages = loopResult._fileData.allPages.slice(0, 10);
+          currentHistory.push({
+            role: "user",
+            parts: loopPages.map(page => ({ inlineData: { mimeType: loopResult._fileData.mimeType, data: page } }))
+          });
+          console.log(`📄 Loop: Sending ${loopPages.length} pages to AI`);
+        }
       }
       
       console.log(`🔍 finalResponse keys: ${Object.keys(currentResponse || {})}`);
