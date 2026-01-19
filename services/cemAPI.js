@@ -133,10 +133,10 @@ async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxP
   const { fromBuffer } = await import('pdf2pic');
   
   const converter = fromBuffer(pdfBuffer, {
-    density: 150,
+    density: 300,
     format: 'png',
-    width: 1200,
-    height: 1600
+    width: 2480,
+    height: 3508
   });
   
   const images = [];
