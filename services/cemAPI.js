@@ -66,6 +66,12 @@ export async function getTasks() {
 }
 
 export async function getTaskById(id) {
+  // ถ้าเป็น task number (เช่น 25110) ให้ค้นหาจาก tasks ทั้งหมด
+  if (/^\d+$/.test(String(id))) {
+    const tasks = await getTasks();
+    const task = tasks?.find(t => t.task_number == id || t.id == id);
+    return task || null;
+  }
   return getCEMData(`/tasks/${id}`);
 }
 
