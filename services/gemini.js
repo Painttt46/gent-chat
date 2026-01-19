@@ -30,31 +30,31 @@ const readProjectFileFunction = {
 // CEM API Functions
 const getDailyWorkFunction = {
     name: "get_daily_work_records",
-    description: "ดึงข้อมูลบันทึกการทำงานประจำวัน (timesheet) ของพนักงาน",
+    description: "ดึงข้อมูลบันทึกการทำงานประจำวัน (timesheet) - ใช้เมื่อถามว่าใครทำงานอะไร, ทำโครงการอะไร, ลงงานวันไหน, ทำงานกี่ชั่วโมง",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
 const getUsersFunction = {
     name: "get_users",
-    description: "ดึงข้อมูลพนักงานทั้งหมด",
+    description: "ดึงข้อมูลพนักงานทั้งหมด - ใช้เมื่อถามเกี่ยวกับพนักงาน, มีใครบ้าง, กี่คน, ตำแหน่งอะไร, แผนกไหน, เบอร์โทร, email",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
 const getTasksFunction = {
     name: "get_tasks",
-    description: "ดึงข้อมูลโครงการทั้งหมด",
+    description: "ดึงข้อมูลโครงการทั้งหมด - ใช้เมื่อถามเกี่ยวกับโครงการ, SO number, ลูกค้า, สถานะโครงการ, วันเริ่ม-สิ้นสุด",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
 const getLeaveRequestsFunction = {
     name: "get_leave_requests",
-    description: "ดึงข้อมูลการลาทั้งหมด",
+    description: "ดึงข้อมูลการลาทั้งหมด - ใช้เมื่อถามว่าใครลา, ลาวันไหน, ลาประเภทอะไร, สถานะอนุมัติ, วันนี้ใครลา",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
 const getCarBookingsFunction = {
     name: "get_car_bookings",
-    description: "ดึงข้อมูลการจองรถทั้งหมด",
+    description: "ดึงข้อมูลการจองรถทั้งหมด - ใช้เมื่อถามเกี่ยวกับการจองรถ, ใครจองรถ, ไปไหน, วันไหน, ทะเบียนอะไร",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
@@ -170,47 +170,37 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 ---
 
 ### **CEM System Integration (ระบบจัดการพนักงาน GenT-CEM):**
-คุณสามารถเข้าถึงข้อมูลจากระบบ CEM (Company Employee Management) ได้ ซึ่งรวมถึง:
+คุณสามารถเข้าถึงข้อมูลจากระบบ CEM (Company Employee Management) ผ่าน Function Calls ต่อไปนี้:
 
-**1. พนักงาน (Users):**
-- id, username, firstname, lastname, email, phone
-- position (ตำแหน่ง), department (แผนก), employee_id (รหัสพนักงาน)
-- role (admin/user/hr), is_active
+**Available CEM Functions:**
+1. \`get_users\` - ดึงข้อมูลพนักงานทั้งหมด (ชื่อ, ตำแหน่ง, แผนก, email, เบอร์โทร)
+2. \`get_tasks\` - ดึงข้อมูลโครงการทั้งหมด (ชื่อโครงการ, เลข SO, ลูกค้า, สถานะ)
+3. \`get_daily_work_records\` - ดึงบันทึกการทำงานประจำวัน (timesheet, ชั่วโมงทำงาน, โครงการที่ทำ)
+4. \`get_leave_requests\` - ดึงข้อมูลการลาทั้งหมด (ประเภทการลา, วันที่, สถานะอนุมัติ)
+5. \`get_car_bookings\` - ดึงข้อมูลการจองรถ (ผู้จอง, ปลายทาง, วันที่, สถานะ)
+6. \`read_project_file\` - อ่านไฟล์เอกสารโครงการ (PDF, รูปภาพ)
 
-**2. โครงการ (Tasks/Projects):**
-- id, task_name (ชื่อโครงการ), so_number (เลข SO), contract_number
-- sale_owner (ผู้ดูแลการขาย), customer_info (ลูกค้า)
-- project_start_date, project_end_date, status, category
-- description, files
+**CRITICAL RULES สำหรับคำถาม CEM:**
+- **ถ้าถามเกี่ยวกับพนักงาน** (ใครบ้าง, กี่คน, ตำแหน่งอะไร) → เรียก \`get_users\`
+- **ถ้าถามเกี่ยวกับโครงการ** (มีโครงการอะไร, SO เท่าไหร่, ลูกค้าใคร) → เรียก \`get_tasks\`
+- **ถ้าถามว่าใครทำงานอะไร/ทำโครงการอะไร** → เรียก \`get_daily_work_records\` แล้วกรองตามชื่อ
+- **ถ้าถามเกี่ยวกับการลา** (ใครลา, ลาวันไหน, สถานะการลา) → เรียก \`get_leave_requests\`
+- **ถ้าถามเกี่ยวกับรถ/การจองรถ** → เรียก \`get_car_bookings\`
+- **ถ้าถามเกี่ยวกับเอกสารโครงการ** → เรียก \`read_project_file\`
 
-**3. บันทึกการทำงาน (Daily Work Records/Timesheet):**
-- id, task_id, step_id, user_id, work_date
-- start_time, end_time, total_hours (ชั่วโมงทำงาน)
-- work_status, location, work_description
-- employee_name, task_name, step_name
+**วิธีตอบคำถาม CEM:**
+1. เรียก function ที่เกี่ยวข้องก่อนเสมอ
+2. กรองข้อมูลตามคำถาม (ไม่แสดงทั้งหมด)
+3. สรุปเป็นภาษาไทยที่เข้าใจง่าย
+4. ถ้าถามจำนวน ให้นับและตอบเป็นตัวเลข
+5. ถ้าไม่มีข้อมูล ให้บอกว่า "ไม่พบข้อมูล..."
 
-**4. การลา (Leave Requests):**
-- id, user_id, user_name, leave_type (ประเภทการลา)
-- start_datetime, end_datetime, total_days
-- reason, status (pending/approved/rejected)
-- has_delegation, delegate_name
-
-**5. การจองรถ (Car Bookings):**
-- id, user_id, name (ผู้จอง), type (ประเภท)
-- location (ปลายทาง), project, selected_date, time
-- license (ทะเบียนรถ), status (pending/active/completed/cancelled)
-- return_date, return_time, fuel_level_borrow, fuel_level_return
-
-**6. วันหยุด (Holidays):**
-- id, name, date
-
-**วิธีตอบคำถาม CEM (สำคัญมาก!):**
-- **กรองข้อมูลตามคำถาม:** ถ้าถามว่า "วีรภัทร ทำโครงการอะไรบ้าง" ให้ดูจาก Daily Work Records ว่า user_id หรือ employee_name ตรงกับ "วีรภัทร" แล้วดึงเฉพาะ task_name ที่เขาทำ ไม่ใช่แสดงโครงการทั้งหมด
-- **ใช้ Daily Work เป็นหลัก:** เมื่อถามว่าใครทำโครงการอะไร ให้ดูจาก Daily Work Records เพราะมี user_id และ task_id ที่เชื่อมโยงกัน
-- **ถ้าถามจำนวน:** ให้นับเฉพาะที่ตรงกับเงื่อนไข
-- **ถ้าถามรายละเอียด:** ให้แสดงเฉพาะข้อมูลที่เกี่ยวข้องกับคำถาม
-- **ถ้าข้อมูลไม่เพียงพอ:** ให้บอกว่าไม่มีข้อมูลในส่วนนั้น
-- **อย่าแสดงข้อมูลทั้งหมด:** ให้กรองและสรุปเฉพาะที่เกี่ยวข้องกับคำถามเท่านั้น
+**ตัวอย่างคำถาม CEM:**
+- "มีพนักงานกี่คน" → เรียก get_users แล้วนับ
+- "วีรภัทร ทำโครงการอะไรบ้าง" → เรียก get_daily_work_records แล้วกรองตามชื่อ วีรภัทร
+- "วันนี้ใครลาบ้าง" → เรียก get_leave_requests แล้วกรองวันที่วันนี้
+- "มีใครจองรถวันนี้ไหม" → เรียก get_car_bookings แล้วกรองวันที่
+- "โครงการ SO25001 มีรายละเอียดอะไร" → เรียก get_tasks แล้วหา SO25001
 `
             }]
         };
