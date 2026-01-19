@@ -123,11 +123,20 @@ export default async function handler(req, res) {
           break;
         case "read_project_file":
           console.log(`🔍 read_project_file args:`, JSON.stringify(call.args));
-          const task = await cemAPI.getTaskById(call.args.taskId);
-          console.log(`📋 Task ${call.args.taskId}: found=${task?.id}, so_number=${task?.so_number}, files=${task?.files?.length || 0}`);
+          // ถ้าไม่ระบุ taskId ให้ใช้ taskId ล่าสุดที่เปิดอ่าน
+          let taskId = call.args.taskId;
+          const userCtx = stateService.userContext.get(odataId) || {};
+          if (!taskId && userCtx.lastTaskId) {
+            taskId = userCtx.lastTaskId;
+            console.log(`📌 Using last taskId: ${taskId} (${userCtx.lastSoNumber})`);
+          }
+          const task = await cemAPI.getTaskById(taskId);
+          console.log(`📋 Task ${taskId}: found=${task?.id}, so_number=${task?.so_number}, files=${task?.files?.length || 0}`);
           if (!task || !task.files?.length) {
             functionResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
           } else {
+            // บันทึก context ล่าสุด
+            stateService.userContext.set(odataId, { lastTaskId: task.id, lastSoNumber: task.so_number });
             const fileIndex = call.args.fileIndex || 0;
             const filename = task.files[fileIndex];
             if (!filename) {
@@ -142,6 +151,7 @@ export default async function handler(req, res) {
                 functionResult = { 
                   filename, 
                   taskName: task.task_name,
+                  soNumber: task.so_number,
                   totalPages: fileData.pageCount,
                   pagesRead: `${fileData.startPage || 1}-${fileData.endPage || fileData.pageCount}`,
                   hasMore: fileData.hasMore || false,

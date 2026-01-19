@@ -1,4 +1,5 @@
 export const conversations = new Map();
+export const userContext = new Map(); // เก็บ context ล่าสุดของ user (taskId, so_number)
 
 // Model tracking with limits
 export const models = {
