@@ -124,21 +124,6 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 วัน
 // PDF to Image conversion
 async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxPages = 20) {
   const { fromBuffer } = await import('pdf2pic');
-  const pdfParse = (await import('pdf-parse')).default;
-  
-  // นับจำนวนหน้าจริง
-  let totalPages = 1;
-  try {
-    const pdfData = await pdfParse(pdfBuffer);
-    totalPages = pdfData.numpages;
-    console.log(`📖 PDF has ${totalPages} pages`);
-  } catch (e) {
-    console.log(`⚠️ Cannot count PDF pages`);
-  }
-  
-  const actualEndPage = endPage ? Math.min(endPage, totalPages) : Math.min(startPage + maxPages - 1, totalPages);
-  const pagesToConvert = Math.min(actualEndPage - startPage + 1, maxPages);
-  console.log(`📄 Converting pages ${startPage}-${actualEndPage} (${pagesToConvert} pages)`);
   
   const converter = fromBuffer(pdfBuffer, {
     density: 150,
@@ -148,15 +133,40 @@ async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxP
   });
   
   const images = [];
-  for (let i = startPage; i <= actualEndPage; i++) {
+  const maxEndPage = endPage || (startPage + maxPages - 1);
+  let totalPages = 0;
+  
+  // Convert pages และนับจำนวนหน้าไปพร้อมกัน
+  for (let i = startPage; i <= maxEndPage; i++) {
     try {
       const result = await converter(i, { responseType: 'base64' });
-      if (result?.base64) images.push(result.base64);
+      if (result?.base64) {
+        images.push(result.base64);
+        totalPages = i;
+      } else {
+        break;
+      }
     } catch (e) {
+      // ถ้า error แสดงว่าหมดหน้าแล้ว
+      if (totalPages === 0) totalPages = i - 1;
       break;
     }
   }
-  return { images, totalPages };
+  
+  // ถ้ายังไม่รู้ totalPages ให้ลองนับต่อ
+  if (!endPage && images.length === maxPages) {
+    for (let i = maxEndPage + 1; i <= 200; i++) {
+      try {
+        await converter(i, { responseType: 'base64' });
+        totalPages = i;
+      } catch (e) {
+        break;
+      }
+    }
+  }
+  
+  console.log(`📄 Converted pages ${startPage}-${startPage + images.length - 1}, total: ${totalPages}`);
+  return { images, totalPages: totalPages || images.length };
 }
 
 // File download - returns base64 (with cache & PDF conversion)
