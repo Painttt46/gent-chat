@@ -207,10 +207,22 @@ export default async function handler(req, res) {
         stateService.getCurrentApiKey(), currentModel, historyWithFunction, userId
       );
       console.log(`🔍 finalResponse type: ${typeof finalResponse}, keys: ${Object.keys(finalResponse || {})}`);
+      console.log(`🔍 rawContent parts:`, JSON.stringify(finalResponse.rawContent?.parts?.map(p => Object.keys(p))));
+      
+      // ดึง text จาก response - รองรับทั้ง Gemini 3 และ SDK format
       text = finalResponse.text();
+      if (!text && finalResponse.rawContent?.parts) {
+        // Gemini 3 อาจมี text อยู่ใน parts หลายตัว
+        const textParts = finalResponse.rawContent.parts.filter(p => p.text);
+        text = textParts.map(p => p.text).join('\n');
+      }
       console.log(`📝 After function call text: ${text?.substring(0, 100)}`);
     } else {
       text = geminiResponse.text();
+      if (!text && geminiResponse.rawContent?.parts) {
+        const textParts = geminiResponse.rawContent.parts.filter(p => p.text);
+        text = textParts.map(p => p.text).join('\n');
+      }
     }
 
     console.log(`📝 Response text length: ${text?.length || 0}`);
