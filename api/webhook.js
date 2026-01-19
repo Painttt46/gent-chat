@@ -125,7 +125,7 @@ export default async function handler(req, res) {
           console.log(`🔍 read_project_file args:`, JSON.stringify(call.args));
           // ถ้าไม่ระบุ taskId ให้ใช้ taskId ล่าสุดที่เปิดอ่าน
           let taskId = call.args.taskId;
-          const userCtx = stateService.userContext.get(odataId) || {};
+          const userCtx = stateService.userContext.get(userId) || {};
           if (!taskId && userCtx.lastTaskId) {
             taskId = userCtx.lastTaskId;
             console.log(`📌 Using last taskId: ${taskId} (${userCtx.lastSoNumber})`);
@@ -136,7 +136,7 @@ export default async function handler(req, res) {
             functionResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
           } else {
             // บันทึก context ล่าสุด
-            stateService.userContext.set(odataId, { lastTaskId: task.id, lastSoNumber: task.so_number });
+            stateService.userContext.set(userId, { lastTaskId: task.id, lastSoNumber: task.so_number });
             const fileIndex = call.args.fileIndex || 0;
             const filename = task.files[fileIndex];
             if (!filename) {
