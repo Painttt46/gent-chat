@@ -27,6 +27,39 @@ const readProjectFileFunction = {
     }
 };
 
+// CEM API Functions
+const getDailyWorkFunction = {
+    name: "get_daily_work_records",
+    description: "ดึงข้อมูลบันทึกการทำงานประจำวัน (timesheet) ของพนักงาน",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
+const getUsersFunction = {
+    name: "get_users",
+    description: "ดึงข้อมูลพนักงานทั้งหมด",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
+const getTasksFunction = {
+    name: "get_tasks",
+    description: "ดึงข้อมูลโครงการทั้งหมด",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
+const getLeaveRequestsFunction = {
+    name: "get_leave_requests",
+    description: "ดึงข้อมูลการลาทั้งหมด",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
+const getCarBookingsFunction = {
+    name: "get_car_bookings",
+    description: "ดึงข้อมูลการจองรถทั้งหมด",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
+const cemFunctions = [readProjectFileFunction, getDailyWorkFunction, getUsersFunction, getTasksFunction, getLeaveRequestsFunction, getCarBookingsFunction];
+
 async function withTimeout(promise, timeoutMs = 120000) {
     return Promise.race([
         promise,
@@ -194,7 +227,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: history,
-                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, readProjectFileFunction] }],
+                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
                         systemInstruction: cemSystemInstruction,
                         generationConfig: {
                             thinkingConfig: { thinkingBudget: 2048 }
@@ -225,7 +258,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 
         const modelConfig = {
             model: modelName,
-            tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, readProjectFileFunction] }],
+            tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
             systemInstruction: cemSystemInstruction
         };
 

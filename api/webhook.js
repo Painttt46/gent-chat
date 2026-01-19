@@ -146,6 +146,21 @@ export default async function handler(req, res) {
             }
           }
           break;
+        case "get_daily_work_records":
+          functionResult = await cemAPI.getDailyWork(call.args || {});
+          break;
+        case "get_users":
+          functionResult = await cemAPI.getUsers();
+          break;
+        case "get_tasks":
+          functionResult = await cemAPI.getTasks();
+          break;
+        case "get_leave_requests":
+          functionResult = await cemAPI.getLeaveRequests();
+          break;
+        case "get_car_bookings":
+          functionResult = await cemAPI.getCarBookings();
+          break;
         default:
           functionResult = { error: "Unknown function called." };
       }
