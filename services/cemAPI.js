@@ -66,20 +66,20 @@ export async function getTasks() {
 }
 
 export async function getTaskById(id) {
-  // ถ้าเป็น task number (เช่น 25110 หรือ SO25110) ให้ค้นหาจาก tasks ทั้งหมด
-  const idStr = String(id);
-  if (/^\d+$/.test(idStr) || /^SO\d+$/i.test(idStr)) {
-    const tasks = await getTasks();
-    const numOnly = idStr.replace(/^SO/i, '');
-    const task = tasks?.find(t => 
-      t.task_number == idStr || 
-      t.task_number == numOnly || 
-      t.task_number == `SO${numOnly}` ||
-      t.id == idStr
-    );
-    return task || null;
-  }
-  return getCEMData(`/tasks/${id}`);
+  const idStr = String(id).trim();
+  const numOnly = idStr.replace(/^SO/i, '');
+  const tasks = await getTasks();
+  
+  const task = tasks?.find(t => 
+    t.id == idStr ||
+    t.so_number == idStr || 
+    t.so_number == numOnly || 
+    t.so_number == `SO${numOnly}` ||
+    t.task_number == idStr ||
+    t.task_number == numOnly ||
+    t.task_name?.toLowerCase().includes(idStr.toLowerCase())
+  );
+  return task || null;
 }
 
 // Task Steps API
