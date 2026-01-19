@@ -135,11 +135,12 @@ export default async function handler(req, res) {
               if (!fileData) {
                 functionResult = { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
               } else {
-                // ส่ง file content กลับให้ Gemini อ่าน
+                // เก็บ file data ไว้ส่งเป็น part แยก
                 functionResult = { 
                   filename, 
                   taskName: task.task_name,
-                  fileContent: { inlineData: { mimeType: fileData.mimeType, data: fileData.base64 } }
+                  message: "กรุณาวิเคราะห์ไฟล์ที่แนบมาพร้อมนี้ รวมถึงรูปภาพและตารางในเอกสาร",
+                  _fileData: fileData // เก็บไว้ใช้ข้างล่าง
                 };
               }
             }
@@ -154,11 +155,38 @@ export default async function handler(req, res) {
         ? geminiResponse.rawContent 
         : { role: "model", parts: [{ functionCall: call }] };
 
+      // 1. Function Response Message (role: "function")
+      const functionMsg = {
+        role: "function",
+        parts: [{ 
+          functionResponse: { 
+            name: call.name, 
+            response: { ...functionResult, _fileData: undefined }
+          } 
+        }]
+      };
+
+      // 2. User Message สำหรับส่งไฟล์ (ถ้ามี)
+      let fileMsg = null;
+      if (functionResult._fileData) {
+        fileMsg = {
+          role: "user",
+          parts: [{
+            inlineData: {
+              mimeType: functionResult._fileData.mimeType,
+              data: functionResult._fileData.base64
+            }
+          }]
+        };
+      }
+
+      // 3. ประกอบ History
       const historyWithFunction = [
         ...conversationHistory,
         modelPart,
-        { role: "function", parts: [{ functionResponse: { name: call.name, response: functionResult } }] }
+        functionMsg
       ];
+      if (fileMsg) historyWithFunction.push(fileMsg);
 
       const { response: finalResponse } = await callGeminiWithFallback(
         stateService.getCurrentApiKey(), currentModel, historyWithFunction, userId
