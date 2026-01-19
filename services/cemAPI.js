@@ -131,10 +131,10 @@ const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 วัน
 // PDF to Image conversion
 async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null) {
   const { fromBuffer } = await import('pdf2pic');
-  const pdf = await import('pdf-parse');
+  const pdfParse = (await import('pdf-parse')).default;
   
   // หาจำนวนหน้าทั้งหมด
-  const pdfData = await pdf.default(pdfBuffer);
+  const pdfData = await pdfParse(pdfBuffer);
   const totalPages = pdfData.numpages;
   
   const converter = fromBuffer(pdfBuffer, {
