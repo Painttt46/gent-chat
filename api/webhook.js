@@ -123,6 +123,7 @@ export default async function handler(req, res) {
           break;
         case "read_project_file":
           const task = await cemAPI.getTaskById(call.args.taskId);
+          console.log(`📋 Task ${call.args.taskId}: files=${task?.files?.length || 0}`);
           if (!task || !task.files?.length) {
             functionResult = { error: "ไม่พบไฟล์ในโครงการนี้" };
           } else {
