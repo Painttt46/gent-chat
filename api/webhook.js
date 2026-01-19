@@ -170,13 +170,13 @@ export default async function handler(req, res) {
         ? geminiResponse.rawContent 
         : { role: "model", parts: [{ functionCall: call }] };
 
-      // 1. Function Response Message (role: "function")
+      // 1. Function Response Message
       const functionMsg = {
-        role: "function",
+        role: "user",
         parts: [{ 
           functionResponse: { 
             name: call.name, 
-            response: { ...functionResult, _fileData: undefined }
+            response: { result: { ...functionResult, _fileData: undefined } }
           } 
         }]
       };
@@ -256,7 +256,7 @@ export default async function handler(req, res) {
         currentHistory = [
           ...currentHistory,
           loopModelPart,
-          { role: "function", parts: [{ functionResponse: { name: loopCall.name, response: loopResult } }] }
+          { role: "user", parts: [{ functionResponse: { name: loopCall.name, response: { result: loopResult } } }] }
         ];
       }
       
