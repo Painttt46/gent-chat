@@ -129,8 +129,13 @@ const fileCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 วัน
 
 // PDF to Image conversion
-async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxPages = 10) {
+async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null) {
   const { fromBuffer } = await import('pdf2pic');
+  const pdf = await import('pdf-parse');
+  
+  // หาจำนวนหน้าทั้งหมด
+  const pdfData = await pdf.default(pdfBuffer);
+  const totalPages = pdfData.numpages;
   
   const converter = fromBuffer(pdfBuffer, {
     density: 300,
@@ -140,7 +145,8 @@ async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxP
   });
   
   const images = [];
-  const maxEndPage = endPage || (startPage + maxPages - 1);
+  const actualEndPage = endPage || totalPages;
+  const maxEndPage = Math.min(actualEndPage, startPage + 49); // max 50 หน้าต่อครั้ง
   
   for (let i = startPage; i <= maxEndPage; i++) {
     try {
@@ -156,10 +162,10 @@ async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxP
   }
   
   const lastPage = startPage + images.length - 1;
-  const hasMore = images.length === (maxEndPage - startPage + 1);
-  console.log(`📄 Converted pages ${startPage}-${lastPage} (${images.length} pages)${hasMore ? ' - may have more' : ''}`);
+  const hasMore = lastPage < totalPages;
+  console.log(`📄 Converted pages ${startPage}-${lastPage}/${totalPages} (${images.length} pages)${hasMore ? ` - ${totalPages - lastPage} pages remaining` : ''}`);
   
-  return { images, totalPages: hasMore ? '80+' : lastPage, lastPage };
+  return { images, totalPages, lastPage, hasMore };
 }
 
 // File download - returns base64 (with cache & PDF conversion)
@@ -181,7 +187,7 @@ export async function downloadFile(filename, startPage = 1, endPage = null) {
 
     if (isPdf) {
       console.log(`🔄 Converting PDF to images: ${filename} (pages ${startPage}-${endPage || 'end'})`);
-      const { images, totalPages, lastPage } = await convertPdfToImages(response.data, startPage, endPage);
+      const { images, totalPages, lastPage, hasMore } = await convertPdfToImages(response.data, startPage, endPage);
       if (images.length > 0) {
         result = { 
           base64: images[0],
@@ -191,9 +197,11 @@ export async function downloadFile(filename, startPage = 1, endPage = null) {
           pageCount: totalPages,
           pagesConverted: images.length,
           startPage,
-          endPage: lastPage
+          endPage: lastPage,
+          hasMore,
+          nextPage: hasMore ? lastPage + 1 : null
         };
-        console.log(`✅ Converted PDF: ${filename} (pages ${startPage}-${lastPage})`);
+        console.log(`✅ Converted PDF: ${filename} (pages ${startPage}-${lastPage}/${totalPages})`);
       } else {
         result = { base64: Buffer.from(response.data).toString('base64'), mimeType: 'application/pdf', size: response.data.length, pageCount: 1 };
       }

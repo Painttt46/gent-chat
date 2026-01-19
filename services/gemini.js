@@ -153,16 +153,16 @@ export async function getGeminiResponse(apiKey, modelName, history) {
     return withRetry(async () => {
         const genAI = getGenAI(apiKey);
         
-        // เพิ่ม CEM context ถ้ามีคำถามเกี่ยวข้อง
-        const lastMessage = history[history.length - 1];
-        let cemContext = '';
-        if (lastMessage?.parts?.[0]?.text) {
-            cemContext = await getCEMContext(lastMessage.parts[0].text);
-            if (cemContext) {
-                console.log('📊 CEM Context added to message');
-                lastMessage.parts[0].text += cemContext;
-            }
-        }
+        // ❌ ปิด Pre-fetching - ให้ AI ตัดสินใจเรียก Tool เองเมื่อจำเป็น
+        // const lastMessage = history[history.length - 1];
+        // let cemContext = '';
+        // if (lastMessage?.parts?.[0]?.text) {
+        //     cemContext = await getCEMContext(lastMessage.parts[0].text);
+        //     if (cemContext) {
+        //         console.log('📊 CEM Context added to message');
+        //         lastMessage.parts[0].text += cemContext;
+        //     }
+        // }
 
         // สร้าง systemInstruction ใหม่ที่รวม CEM info
         const cemSystemInstruction = {
@@ -225,7 +225,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                         tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
                         systemInstruction: cemSystemInstruction,
                         generationConfig: {
-                            thinkingConfig: { thinkingBudget: 2048 }
+                            thinkingConfig: { thinkingBudget: 4096 }
                         }
                     })
                 }

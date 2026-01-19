@@ -144,7 +144,11 @@ export default async function handler(req, res) {
                   taskName: task.task_name,
                   totalPages: fileData.pageCount,
                   pagesRead: `${fileData.startPage || 1}-${fileData.endPage || fileData.pageCount}`,
-                  message: "กรุณาวิเคราะห์ไฟล์ที่แนบมาพร้อมนี้ รวมถึงรูปภาพและตารางในเอกสาร",
+                  hasMore: fileData.hasMore || false,
+                  nextPage: fileData.nextPage || null,
+                  message: fileData.hasMore 
+                    ? `กรุณาวิเคราะห์ไฟล์ที่แนบมา (หน้า ${fileData.startPage}-${fileData.endPage} จาก ${fileData.pageCount} หน้า) ยังมีอีก ${fileData.pageCount - fileData.endPage} หน้า ถ้าต้องการอ่านต่อให้บอก`
+                    : "กรุณาวิเคราะห์ไฟล์ที่แนบมาพร้อมนี้ รวมถึงรูปภาพและตารางในเอกสาร",
                   _fileData: fileData
                 };
               }
