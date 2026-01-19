@@ -203,17 +203,68 @@ export default async function handler(req, res) {
       ];
       if (fileMsg) historyWithFunction.push(fileMsg);
 
-      const { response: finalResponse } = await callGeminiWithFallback(
-        stateService.getCurrentApiKey(), currentModel, historyWithFunction, userId
-      );
-      console.log(`🔍 finalResponse type: ${typeof finalResponse}, keys: ${Object.keys(finalResponse || {})}`);
-      console.log(`🔍 rawContent parts:`, JSON.stringify(finalResponse.rawContent?.parts?.map(p => Object.keys(p))));
+      let currentHistory = historyWithFunction;
+      let currentResponse;
+      let maxLoops = 3;
       
-      // ดึง text จาก response - รองรับทั้ง Gemini 3 และ SDK format
-      text = finalResponse.text();
-      if (!text && finalResponse.rawContent?.parts) {
-        // Gemini 3 อาจมี text อยู่ใน parts หลายตัว
-        const textParts = finalResponse.rawContent.parts.filter(p => p.text);
+      while (maxLoops-- > 0) {
+        const { response: loopResponse } = await callGeminiWithFallback(
+          stateService.getCurrentApiKey(), currentModel, currentHistory, userId
+        );
+        currentResponse = loopResponse;
+        
+        const loopFunctionCalls = loopResponse.functionCalls();
+        if (!loopFunctionCalls || loopFunctionCalls.length === 0) break;
+        
+        const loopCall = loopFunctionCalls[0];
+        console.log(`🔧 Additional function call: "${loopCall.name}"`);
+        let loopResult;
+        
+        switch (loopCall.name) {
+          case "get_user_calendar":
+            loopResult = await graphService.getUserCalendar(loopCall.args.userPrincipalName, loopCall.args.startDate, loopCall.args.endDate);
+            break;
+          case "find_available_time":
+            loopResult = await graphService.findAvailableTime(loopCall.args);
+            break;
+          case "create_calendar_event":
+            loopResult = await graphService.createCalendarEvent(loopCall.args);
+            break;
+          case "get_daily_work_records":
+            loopResult = await cemAPI.getDailyWork(loopCall.args || {});
+            break;
+          case "get_users":
+            loopResult = await cemAPI.getUsers();
+            break;
+          case "get_tasks":
+            loopResult = await cemAPI.getTasks();
+            break;
+          case "get_leave_requests":
+            loopResult = await cemAPI.getLeaveRequests();
+            break;
+          case "get_car_bookings":
+            loopResult = await cemAPI.getCarBookings();
+            break;
+          default:
+            loopResult = { error: "Unknown function" };
+        }
+        
+        const loopModelPart = isGemini3 && loopResponse.rawContent 
+          ? loopResponse.rawContent 
+          : { role: "model", parts: [{ functionCall: loopCall }] };
+        
+        currentHistory = [
+          ...currentHistory,
+          loopModelPart,
+          { role: "function", parts: [{ functionResponse: { name: loopCall.name, response: loopResult } }] }
+        ];
+      }
+      
+      console.log(`🔍 finalResponse keys: ${Object.keys(currentResponse || {})}`);
+      
+      text = currentResponse.text();
+      if (!text && currentResponse.rawContent?.parts) {
+        const textParts = currentResponse.rawContent.parts.filter(p => p.text);
         text = textParts.map(p => p.text).join('\n');
       }
       console.log(`📝 After function call text: ${text?.substring(0, 100)}`);
