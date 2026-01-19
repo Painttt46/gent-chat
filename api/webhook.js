@@ -131,16 +131,19 @@ export default async function handler(req, res) {
             if (!filename) {
               functionResult = { error: `ไม่พบไฟล์ลำดับที่ ${fileIndex}`, availableFiles: task.files };
             } else {
-              const fileData = await cemAPI.downloadFile(filename);
+              const startPage = call.args.startPage || 1;
+              const endPage = call.args.endPage || null;
+              const fileData = await cemAPI.downloadFile(filename, startPage, endPage);
               if (!fileData) {
                 functionResult = { error: "ไม่สามารถดาวน์โหลดไฟล์ได้" };
               } else {
-                // เก็บ file data ไว้ส่งเป็น part แยก
                 functionResult = { 
                   filename, 
                   taskName: task.task_name,
+                  totalPages: fileData.pageCount,
+                  pagesRead: `${fileData.startPage || 1}-${fileData.endPage || fileData.pageCount}`,
                   message: "กรุณาวิเคราะห์ไฟล์ที่แนบมาพร้อมนี้ รวมถึงรูปภาพและตารางในเอกสาร",
-                  _fileData: fileData // เก็บไว้ใช้ข้างล่าง
+                  _fileData: fileData
                 };
               }
             }
@@ -184,15 +187,19 @@ export default async function handler(req, res) {
       // 2. User Message สำหรับส่งไฟล์ (ถ้ามี)
       let fileMsg = null;
       if (functionResult._fileData) {
+        const pages = functionResult._fileData.allPages || [functionResult._fileData.base64];
+        // ส่งสูงสุด 20 หน้า เพื่อไม่ให้ request ใหญ่เกินไป
+        const pagesToSend = pages.slice(0, 20);
         fileMsg = {
           role: "user",
-          parts: [{
+          parts: pagesToSend.map(page => ({
             inlineData: {
               mimeType: functionResult._fileData.mimeType,
-              data: functionResult._fileData.base64
+              data: page
             }
-          }]
+          }))
         };
+        console.log(`📄 Sending ${pagesToSend.length}/${pages.length} pages to AI`);
       }
 
       // 3. ประกอบ History

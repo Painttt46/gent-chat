@@ -122,8 +122,24 @@ const fileCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 1 วัน
 
 // PDF to Image conversion
-async function convertPdfToImages(pdfBuffer, maxPages = 3) {
+async function convertPdfToImages(pdfBuffer, startPage = 1, endPage = null, maxPages = 20) {
   const { fromBuffer } = await import('pdf2pic');
+  const pdfParse = (await import('pdf-parse')).default;
+  
+  // นับจำนวนหน้าจริง
+  let totalPages = 1;
+  try {
+    const pdfData = await pdfParse(pdfBuffer);
+    totalPages = pdfData.numpages;
+    console.log(`📖 PDF has ${totalPages} pages`);
+  } catch (e) {
+    console.log(`⚠️ Cannot count PDF pages`);
+  }
+  
+  const actualEndPage = endPage ? Math.min(endPage, totalPages) : Math.min(startPage + maxPages - 1, totalPages);
+  const pagesToConvert = Math.min(actualEndPage - startPage + 1, maxPages);
+  console.log(`📄 Converting pages ${startPage}-${actualEndPage} (${pagesToConvert} pages)`);
+  
   const converter = fromBuffer(pdfBuffer, {
     density: 150,
     format: 'png',
@@ -132,7 +148,7 @@ async function convertPdfToImages(pdfBuffer, maxPages = 3) {
   });
   
   const images = [];
-  for (let i = 1; i <= maxPages; i++) {
+  for (let i = startPage; i <= actualEndPage; i++) {
     try {
       const result = await converter(i, { responseType: 'base64' });
       if (result?.base64) images.push(result.base64);
@@ -140,14 +156,15 @@ async function convertPdfToImages(pdfBuffer, maxPages = 3) {
       break;
     }
   }
-  return images;
+  return { images, totalPages };
 }
 
 // File download - returns base64 (with cache & PDF conversion)
-export async function downloadFile(filename) {
-  const cached = fileCache.get(filename);
+export async function downloadFile(filename, startPage = 1, endPage = null) {
+  const cacheKey = `${filename}_${startPage}_${endPage || 'end'}`;
+  const cached = fileCache.get(cacheKey);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
-    console.log(`📦 Cache hit: ${filename}`);
+    console.log(`📦 Cache hit: ${filename} (pages ${startPage}-${endPage || 'end'})`);
     return cached.data;
   }
 
@@ -160,28 +177,31 @@ export async function downloadFile(filename) {
     let result;
 
     if (isPdf) {
-      console.log(`🔄 Converting PDF to images: ${filename}`);
-      const images = await convertPdfToImages(response.data);
+      console.log(`🔄 Converting PDF to images: ${filename} (pages ${startPage}-${endPage || 'end'})`);
+      const { images, totalPages } = await convertPdfToImages(response.data, startPage, endPage);
       if (images.length > 0) {
         result = { 
           base64: images[0],
           allPages: images,
           mimeType: 'image/png', 
           size: response.data.length,
-          pageCount: images.length
+          pageCount: totalPages,
+          pagesConverted: images.length,
+          startPage,
+          endPage: startPage + images.length - 1
         };
-        console.log(`✅ Converted PDF: ${filename} (${images.length} pages)`);
+        console.log(`✅ Converted PDF: ${filename} (${images.length}/${totalPages} pages)`);
       } else {
-        result = { base64: Buffer.from(response.data).toString('base64'), mimeType: 'application/pdf', size: response.data.length };
+        result = { base64: Buffer.from(response.data).toString('base64'), mimeType: 'application/pdf', size: response.data.length, pageCount: 1 };
       }
     } else {
       const mimeType = filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? 'image/jpeg'
         : filename.endsWith('.png') ? 'image/png' : 'application/octet-stream';
-      result = { base64: Buffer.from(response.data).toString('base64'), mimeType, size: response.data.length };
+      result = { base64: Buffer.from(response.data).toString('base64'), mimeType, size: response.data.length, pageCount: 1 };
       console.log(`✅ Downloaded: ${filename} (${Math.round(response.data.length/1024)}KB)`);
     }
 
-    fileCache.set(filename, { data: result, cachedAt: Date.now() });
+    fileCache.set(cacheKey, { data: result, cachedAt: Date.now() });
     return result;
   } catch (error) {
     console.error(`❌ File download error:`, error.message);

@@ -16,12 +16,14 @@ function getGenAI(apiKey) {
 // Function declaration สำหรับอ่านไฟล์โครงการ
 const readProjectFileFunction = {
     name: "read_project_file",
-    description: "อ่านไฟล์เอกสารที่แนบกับโครงการ เช่น สัญญา ใบสั่งซื้อ เอกสารโครงการ รองรับ PDF และรูปภาพ",
+    description: "อ่านไฟล์เอกสารที่แนบกับโครงการ เช่น สัญญา ใบสั่งซื้อ เอกสารโครงการ รองรับ PDF และรูปภาพ สามารถเลือกช่วงหน้าที่ต้องการอ่านได้",
     parameters: {
         type: "object",
         properties: {
             taskId: { type: "number", description: "ID ของโครงการที่ต้องการดูไฟล์" },
-            fileIndex: { type: "number", description: "ลำดับไฟล์ที่ต้องการอ่าน (เริ่มจาก 0) ถ้าไม่ระบุจะอ่านไฟล์แรก" }
+            fileIndex: { type: "number", description: "ลำดับไฟล์ที่ต้องการอ่าน (เริ่มจาก 0) ถ้าไม่ระบุจะอ่านไฟล์แรก" },
+            startPage: { type: "number", description: "หน้าเริ่มต้นที่ต้องการอ่าน (เริ่มจาก 1) ถ้าไม่ระบุจะเริ่มจากหน้า 1" },
+            endPage: { type: "number", description: "หน้าสุดท้ายที่ต้องการอ่าน ถ้าไม่ระบุจะอ่านถึงหน้าสุดท้าย (สูงสุด 20 หน้าต่อครั้ง)" }
         },
         required: ["taskId"]
     }
