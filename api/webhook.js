@@ -165,21 +165,21 @@ export default async function handler(req, res) {
           functionResult = { error: "Unknown function called." };
       }
 
+      // Helper สร้าง function response ตาม model
+      const makeFunctionResponse = (name, result, forGemini3) => {
+        if (forGemini3) {
+          return { role: "user", parts: [{ functionResponse: { name, response: { result } } }] };
+        }
+        return { role: "function", parts: [{ functionResponse: { name, response: result } }] };
+      };
+
       // สำหรับ Gemini 3: ใช้ rawContent ทั้งก้อน
       const modelPart = isGemini3 && geminiResponse.rawContent 
         ? geminiResponse.rawContent 
         : { role: "model", parts: [{ functionCall: call }] };
 
       // 1. Function Response Message
-      const functionMsg = {
-        role: "user",
-        parts: [{ 
-          functionResponse: { 
-            name: call.name, 
-            response: { result: { ...functionResult, _fileData: undefined } }
-          } 
-        }]
-      };
+      const functionMsg = makeFunctionResponse(call.name, { ...functionResult, _fileData: undefined }, isGemini3);
 
       // 2. User Message สำหรับส่งไฟล์ (ถ้ามี)
       let fileMsg = null;
@@ -208,10 +208,11 @@ export default async function handler(req, res) {
       let maxLoops = 3;
       
       while (maxLoops-- > 0) {
-        const { response: loopResponse } = await callGeminiWithFallback(
+        const { response: loopResponse, model: usedLoopModel } = await callGeminiWithFallback(
           stateService.getCurrentApiKey(), currentModel, currentHistory, userId
         );
         currentResponse = loopResponse;
+        const loopIsGemini3 = usedLoopModel?.includes('gemini-3') || usedLoopModel?.includes('thinking');
         
         const loopFunctionCalls = loopResponse.functionCalls();
         if (!loopFunctionCalls || loopFunctionCalls.length === 0) break;
@@ -249,14 +250,14 @@ export default async function handler(req, res) {
             loopResult = { error: "Unknown function" };
         }
         
-        const loopModelPart = isGemini3 && loopResponse.rawContent 
+        const loopModelPart = loopIsGemini3 && loopResponse.rawContent 
           ? loopResponse.rawContent 
           : { role: "model", parts: [{ functionCall: loopCall }] };
         
         currentHistory = [
           ...currentHistory,
           loopModelPart,
-          { role: "user", parts: [{ functionResponse: { name: loopCall.name, response: { result: loopResult } } }] }
+          makeFunctionResponse(loopCall.name, loopResult, loopIsGemini3)
         ];
       }
       
