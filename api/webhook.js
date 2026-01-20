@@ -157,8 +157,8 @@ export default async function handler(req, res) {
                   hasMore: fileData.hasMore || false,
                   nextPage: fileData.nextPage || null,
                   message: fileData.hasMore 
-                    ? `กรุณาวิเคราะห์ไฟล์ที่แนบมา (หน้า ${fileData.startPage}-${fileData.endPage} จาก ${fileData.pageCount} หน้า) ยังมีอีก ${fileData.pageCount - fileData.endPage} หน้า ถ้าต้องการอ่านต่อให้บอก`
-                    : "กรุณาวิเคราะห์ไฟล์ที่แนบมาพร้อมนี้ รวมถึงรูปภาพและตารางในเอกสาร",
+                    ? `กรุณาอ่านไฟล์แนบนี้อย่างละเอียด (หน้า ${fileData.startPage}-${fileData.endPage} จาก ${fileData.pageCount}) *สำคัญ: อ่านให้ครบทุกบรรทัด ห้ามข้ามข้อความแม้เลขข้อจะเรียงผิด*`
+                    : "กรุณาอ่านไฟล์แนบนี้อย่างละเอียดทุกตัวอักษร สำคัญ: เอกสารอาจมีการพิมพ์เลขข้อผิด ห้ามตัดเนื้อหาทิ้ง ให้อ่านเรียงตามบรรทัดที่ปรากฏจริง",
                   _fileData: fileData
                 };
               }

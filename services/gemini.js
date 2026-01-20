@@ -1,7 +1,7 @@
 // services/gemini.service.js
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { calendarFunction, createEventFunction, findAvailableTimeFunction, systemInstruction } from '../config/gent_config.js';
+import { calendarFunction, systemInstruction } from '../config/gent_config.js';
 import * as cemAPI from './cemAPI.js';
 
 const genAICache = new Map();
@@ -222,7 +222,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
                             if (msg.parts) return msg; // keep rawContent as-is (includes thoughtSignature)
                             return { role: msg.role, parts: [{ text: msg.text || '' }] };
                         }),
-                        tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
+                        tools: [{ functionDeclarations: [calendarFunction, ...cemFunctions] }],
                         systemInstruction: cemSystemInstruction,
                         generationConfig: {
                             thinkingConfig: { thinkingBudget: 4096 }
@@ -253,7 +253,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 
         const modelConfig = {
             model: modelName,
-            tools: [{ functionDeclarations: [calendarFunction, createEventFunction, findAvailableTimeFunction, ...cemFunctions] }],
+            tools: [{ functionDeclarations: [calendarFunction, ...cemFunctions] }],
             systemInstruction: cemSystemInstruction
         };
 
