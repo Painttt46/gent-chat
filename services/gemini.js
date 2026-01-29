@@ -54,13 +54,19 @@ const getLeaveRequestsFunction = {
     parameters: { type: "object", properties: {}, required: [] }
 };
 
+const getPendingLeavesFunction = {
+    name: "get_pending_leaves",
+    description: "ดึงข้อมูลการลาที่รอดำเนินการ/รออนุมัติ สำหรับผู้อนุมัติ - ใช้เมื่อถามว่ามีใครรอให้อนุมัติ, มีกี่คนรออนุมัติ, การลาที่รอดำเนินการ, pending leave",
+    parameters: { type: "object", properties: {}, required: [] }
+};
+
 const getCarBookingsFunction = {
     name: "get_car_bookings",
     description: "ดึงข้อมูลการจองรถทั้งหมด - ใช้เมื่อถามเกี่ยวกับการจองรถ, ใครจองรถ, ไปไหน, วันไหน, ทะเบียนอะไร",
     parameters: { type: "object", properties: {}, required: [] }
 };
 
-const cemFunctions = [readProjectFileFunction, getDailyWorkFunction, getUsersFunction, getTasksFunction, getLeaveRequestsFunction, getCarBookingsFunction];
+const cemFunctions = [readProjectFileFunction, getDailyWorkFunction, getUsersFunction, getTasksFunction, getLeaveRequestsFunction, getPendingLeavesFunction, getCarBookingsFunction];
 
 async function withTimeout(promise, timeoutMs = 120000) {
     return Promise.race([
@@ -179,14 +185,16 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 2. \`get_tasks\` - ดึงข้อมูลโครงการทั้งหมด (ชื่อโครงการ, เลข SO, ลูกค้า, สถานะ)
 3. \`get_daily_work_records\` - ดึงบันทึกการทำงานประจำวัน (timesheet, ชั่วโมงทำงาน, โครงการที่ทำ)
 4. \`get_leave_requests\` - ดึงข้อมูลการลาทั้งหมด (ประเภทการลา, วันที่, สถานะอนุมัติ)
-5. \`get_car_bookings\` - ดึงข้อมูลการจองรถ (ผู้จอง, ปลายทาง, วันที่, สถานะ)
-6. \`read_project_file\` - อ่านไฟล์เอกสารโครงการ (PDF, รูปภาพ)
+5. \`get_pending_leaves\` - ดึงการลาที่รอดำเนินการ/รออนุมัติ (เฉพาะที่ผู้ถามมีสิทธิ์อนุมัติ)
+6. \`get_car_bookings\` - ดึงข้อมูลการจองรถ (ผู้จอง, ปลายทาง, วันที่, สถานะ)
+7. \`read_project_file\` - อ่านไฟล์เอกสารโครงการ (PDF, รูปภาพ)
 
 **CRITICAL RULES สำหรับคำถาม CEM:**
 - **ถ้าถามเกี่ยวกับพนักงาน** (ใครบ้าง, กี่คน, ตำแหน่งอะไร) → เรียก \`get_users\`
 - **ถ้าถามเกี่ยวกับโครงการ** (มีโครงการอะไร, SO เท่าไหร่, ลูกค้าใคร) → เรียก \`get_tasks\`
 - **ถ้าถามว่าใครทำงานอะไร/ทำโครงการอะไร** → เรียก \`get_daily_work_records\` แล้วกรองตามชื่อ
 - **ถ้าถามเกี่ยวกับการลา** (ใครลา, ลาวันไหน, สถานะการลา) → เรียก \`get_leave_requests\`
+- **ถ้าถามเกี่ยวกับการลาที่รออนุมัติ/pending** → เรียก \`get_pending_leaves\`
 - **ถ้าถามเกี่ยวกับรถ/การจองรถ** → เรียก \`get_car_bookings\`
 - **ถ้าถามเกี่ยวกับเอกสารโครงการ** → เรียก \`read_project_file\`
 
@@ -201,6 +209,7 @@ export async function getGeminiResponse(apiKey, modelName, history) {
 - "มีพนักงานกี่คน" → เรียก get_users แล้วนับ
 - "วีรภัทร ทำโครงการอะไรบ้าง" → เรียก get_daily_work_records แล้วกรองตามชื่อ วีรภัทร
 - "วันนี้ใครลาบ้าง" → เรียก get_leave_requests แล้วกรองวันที่วันนี้
+- "มีใครรอให้อนุมัติการลาไหม" → เรียก get_pending_leaves
 - "มีใครจองรถวันนี้ไหม" → เรียก get_car_bookings แล้วกรองวันที่
 - "โครงการ SO25001 มีรายละเอียดอะไร" → เรียก get_tasks แล้วหา SO25001
 `

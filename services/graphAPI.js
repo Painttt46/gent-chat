@@ -67,6 +67,25 @@ export async function findUserByShortName(name) {
     }
 }
 
+export async function getUserEmail(aadObjectId) {
+    try {
+        const token = await getGraphToken();
+        const url = `https://graph.microsoft.com/v1.0/users/${aadObjectId}?$select=mail,userPrincipalName`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            console.error('Graph API getUserEmail error:', response.status);
+            return null;
+        }
+        const data = await response.json();
+        return data.mail || data.userPrincipalName;
+    } catch (error) {
+        console.error('getUserEmail error:', error);
+        return null;
+    }
+}
+
 export async function getUserCalendar(nameOrEmail, startDate = null, endDate = null) {
     let userEmail = nameOrEmail;
     if (!nameOrEmail.includes('@')) {

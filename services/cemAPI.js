@@ -98,6 +98,81 @@ export async function getLeaveRequests() {
   return getCEMData('/leave');
 }
 
+export async function getLeaveApprovalSettings() {
+  return getCEMData('/settings/leave-approval');
+}
+
+// Get pending leaves filtered by approver's department/position
+export async function getPendingLeavesForApprover(userEmail) {
+  try {
+    const [leaves, users, settings] = await Promise.all([
+      getLeaveRequests(),
+      getUsers(),
+      getLeaveApprovalSettings()
+    ]);
+    
+    if (!leaves || !users || !settings) return null;
+    
+    // Find user by email
+    const user = users.find(u => u.email?.toLowerCase() === userEmail?.toLowerCase());
+    if (!user) return { pending: [], count: 0, isApprover: false };
+    
+    const level1 = settings.level1 || [];
+    const level2 = settings.level2 || [];
+    
+    // Check if user is approver
+    const myLevel1 = level1.find(a => a.user_id == user.id && a.can_approve);
+    const myLevel2 = level2.find(a => a.user_id == user.id && a.can_approve);
+    
+    if (!myLevel1 && !myLevel2) {
+      return { pending: [], count: 0, isApprover: false };
+    }
+    
+    // Get department/position filters
+    let approverDepts = [];
+    let approverPositions = [];
+    
+    if (myLevel1) {
+      approverDepts = approverDepts.concat(myLevel1.department_ids || []);
+      approverPositions = approverPositions.concat(myLevel1.position_ids || []);
+    }
+    if (myLevel2) {
+      approverDepts = approverDepts.concat(myLevel2.department_ids || []);
+      approverPositions = approverPositions.concat(myLevel2.position_ids || []);
+    }
+    
+    approverDepts = [...new Set(approverDepts)];
+    approverPositions = [...new Set(approverPositions)];
+    
+    // Filter pending leaves
+    const pendingLeaves = leaves.filter(leave => {
+      // Check status
+      const isPending = leave.status === 'pending' || leave.status === 'pending_level2';
+      if (!isPending) return false;
+      
+      // Check level match
+      if (myLevel1 && !myLevel2 && leave.status !== 'pending') return false;
+      if (myLevel2 && !myLevel1 && leave.status !== 'pending_level2') return false;
+      
+      // Check department/position match
+      const deptMatch = approverDepts.length === 0 || approverDepts.includes(leave.department);
+      const posMatch = approverPositions.length === 0 || approverPositions.includes(leave.position);
+      
+      return deptMatch && posMatch;
+    });
+    
+    return {
+      pending: pendingLeaves,
+      count: pendingLeaves.length,
+      isApprover: true,
+      approverLevel: myLevel1 && myLevel2 ? 3 : (myLevel1 ? 1 : 2)
+    };
+  } catch (error) {
+    console.error('Error getting pending leaves:', error.message);
+    return null;
+  }
+}
+
 export async function getLeaveTypes() {
   return getCEMData('/leave/leave-types');
 }

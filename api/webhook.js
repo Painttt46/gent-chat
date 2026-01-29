@@ -177,6 +177,13 @@ export default async function handler(req, res) {
         case "get_leave_requests":
           functionResult = await cemAPI.getLeaveRequests();
           break;
+        case "get_pending_leaves":
+          // ดึง email จาก Teams user
+          const userEmail = req.body?.from?.aadObjectId 
+            ? await graphService.getUserEmail(req.body.from.aadObjectId)
+            : null;
+          functionResult = await cemAPI.getPendingLeavesForApprover(userEmail);
+          break;
         case "get_car_bookings":
           functionResult = await cemAPI.getCarBookings();
           break;
@@ -276,6 +283,12 @@ export default async function handler(req, res) {
             break;
           case "get_leave_requests":
             loopResult = await cemAPI.getLeaveRequests();
+            break;
+          case "get_pending_leaves":
+            const loopUserEmail = req.body?.from?.aadObjectId 
+              ? await graphService.getUserEmail(req.body.from.aadObjectId)
+              : null;
+            loopResult = await cemAPI.getPendingLeavesForApprover(loopUserEmail);
             break;
           case "get_car_bookings":
             loopResult = await cemAPI.getCarBookings();
