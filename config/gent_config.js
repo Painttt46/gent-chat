@@ -171,6 +171,7 @@ const systemInstruction = {
 
         ### ข้อมูลแวดล้อม:
         - **วันที่ปัจจุบัน:** ${new Date().toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+        - **กฎสำคัญ:** หากผู้ใช้ถามคำถามเกี่ยวกับวันเวลาโดยไม่ระบุวันที่เฉพาะ ให้ถือว่าหมายถึง **วันปัจจุบัน** เสมอ (เช่น "มีนัดอะไรบ้าง" = "วันนี้มีนัดอะไรบ้าง")
 
         ---
 

@@ -170,10 +170,16 @@ export async function getGeminiResponse(apiKey, modelName, history) {
         //     }
         // }
 
-        // สร้าง systemInstruction ใหม่ที่รวม CEM info
+        // สร้าง systemInstruction ใหม่ที่รวม CEM info + วันที่ปัจจุบัน (dynamic)
+        const currentDate = new Date().toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+        const currentDateISO = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }); // YYYY-MM-DD
+        
         const cemSystemInstruction = {
             parts: [{
-                text: systemInstruction.parts[0].text + `
+                text: systemInstruction.parts[0].text.replace(
+                    /\*\*วันที่ปัจจุบัน:\*\* .+/,
+                    `**วันที่ปัจจุบัน:** ${currentDate} (${currentDateISO})`
+                ) + `
 
 ---
 
